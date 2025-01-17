@@ -4,6 +4,7 @@ module Cardano.Tools.DBServerSpec where
 
 import Cardano.Tools.DBServer (DBServerLog (..), app, withDB, withLog)
 import Data.Functor.Contravariant (contramap)
+import Data.String (fromString)
 import Network.Wai (Application)
 import System.IO (Handle)
 import System.Posix.Temp (mkstemp)
@@ -14,7 +15,11 @@ spec :: Spec
 spec =
   with testApp $
     it "GET /:slot/:hash/header returns block header in hex-encoded CBOR given it exists" $ do
-      get "/295/eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7/header" `shouldRespondWith` 200
+      get "/295/eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7/header"
+        `shouldRespondWith` fromString testHeaderHex
+
+testHeaderHex :: String
+testHeaderHex = "828a0c1901275820e5b1b73c5e7ee253e87d02a420352b8f6250b76688acd06dc9a9b0f58532e1035820e41015edc7b39489226d27c51dbe84c636466b3e29758a95445297614a8050bf582006a90f0597762346dd9eee0017623aca4745105f75b6d0d44355b2639537293482584076b951f29f104902b0e3090cd36ae8ff73980e29e6ac7c770d4dfa309870b2510088f60943f9a5108b0eb438afc19ec4bed0a85a3dc612881cc3383e62f604255850f9b7d5afac819358cb68b1a4f941c8c77c43beb0fa697840ef3743b6059db749a7d8974693dafd67ce5ba4353bb0351d82a44cb77c875def59895709d59e3abd370dec6d85f14c4ab6a5e64d17e4fd0704582029571d16f081709b3c48651860077bebf9340abb3fc7133443c54f1f5a5edcf1845820a5ae7caf7a79b7f750d3d6da9a31d6523bdc0b99cc9dbfbdc11122e3ae07e8280000584071c1947b93fac5684a327a102f522d7b31daccfe8ef69ed0c36ed4618910245756bfe607b5a2bf7725045564b77ee18bfd7ed086b957d856a5491b51fbaedf06820a005901c01a462000cc7c061368fe46efb2974b74a390e9dc4ad5a243ff7f05d729b8bb6fd9177a2f9dd86f649bfed9eece9b83594253b6c705bacc1460fab79840907a05de8e5249591afc25d214c024eac3c1186c26136a8719ca647c3c554aff75301df40a7243f0cea69d0da41b0edd95c35cc6644a433e1a59898f70a88b9578635cb4ee2e7a940b2aa19d596f5b160abc0f83c66cd8c26d8f7226f4556d4a406e0b978df024d42a1a9236d58e8c64733aae1ee6e3258a27bfaf060b6c2913fc9bab1cb543b0b471a48af5e367b75d856a36f5899c8019f91d321c22d012ee466e509d49ca12ed800448ad43ee1575de56abad60d0cd1d2bb9b541573504040c3b4943c077e1127e25a0bb1fb8549c503b519f01f6092a3d3452341da2fb8687e07b340575532fe529cadd9701c300770930c4da09feed3a7f9b4d1253efe0fd1dc05e380763e756b7f6b04d45d45e61aba849736babb9224adbf27a8880f1ecc23dd0bbe61a5b73fa269cc100bf3f6cbd17163f31d38aa22db320d37cbb767821dee4500627980856833e796e4435768172cb98b8b33ed5970a92ab3f046050c9f5aeeafa151f9d11b93c425b68cace42f87c51dee5f0a38071b3a8da23743d699c"
 
 testConfigFile :: FilePath
 testConfigFile = "test-data/config/config.json"
@@ -22,6 +27,7 @@ testConfigFile = "test-data/config/config.json"
 testDatabaseDir :: FilePath
 testDatabaseDir = "test-data/test-db"
 
+-- FIXME: This does not work obviously because the withXXX terminate when we return the Application
 testApp :: IO Application
 testApp = do
   (_, hdl) <- createLog

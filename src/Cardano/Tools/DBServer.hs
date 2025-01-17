@@ -6,11 +6,14 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module Cardano.Tools.DBServer (run, DBServerLog (..), withLog, withDB, app) where
 
+import Cardano.Crypto (unsafeHashFromBytes)
 import Cardano.Ledger.Api (StandardCrypto)
+import Cardano.Protocol.TPraos.BHeader (HashHeader (HashHeader))
 import Cardano.Tools.DBAnalyser.Block.Cardano (Args (CardanoBlockArgs))
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import Control.Monad (forever)
@@ -18,31 +21,37 @@ import Control.Tracer (Tracer (..), contramap, traceWith)
 import Data.Aeson (FromJSON, ToJSON, Value (..), encode, object, toJSON, (.=))
 import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base16 as Hex
+import qualified Data.ByteString.Base16.Lazy as LHex
 import qualified Data.ByteString.Lazy as LBS
 import Data.Function ((&))
 import Data.String (fromString)
 import Data.Text (Text)
-import Data.Text.Encoding (decodeUtf8)
+import qualified Data.Text as Text
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Time.Clock (getCurrentTime)
 import Data.Word (Word64)
 import qualified GHC.Clock
 import GHC.Generics (Generic)
-import Network.HTTP.Types (Status, status200, statusCode, statusMessage)
+import Network.HTTP.Types (Status, status200, status400, status404, statusCode, statusMessage)
 import Network.Socket (PortNumber)
 import Network.Wai (Application, Middleware, pathInfo, requestMethod, responseLBS, responseStatus)
 import qualified Network.Wai.Handler.Warp as Warp
+import Ouroboros.Consensus.Block (ConvertRawHash (fromRawHash), Proxy (..))
+import Ouroboros.Consensus.Block.RealPoint
 import Ouroboros.Consensus.Cardano (CardanoBlock)
 import Ouroboros.Consensus.Config (TopLevelConfig, configStorage)
 import Ouroboros.Consensus.Fragment.InFuture (dontCheck)
 import qualified Ouroboros.Consensus.Node as Node
 import qualified Ouroboros.Consensus.Node.InitStorage as Node
 import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
-import Ouroboros.Consensus.Storage.ChainDB (ChainDB, TraceEvent, defaultArgs)
+import Ouroboros.Consensus.Storage.ChainDB (BlockComponent (GetRawHeader), ChainDB, TraceEvent, defaultArgs, getBlockComponent)
 import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
 import Ouroboros.Consensus.Storage.ChainDB.Impl.Args (completeChainDbArgs, updateTracer)
 import Ouroboros.Consensus.Util.IOLike (MonadSTM (writeTQueue), atomically, newTQueueIO, readTQueue, withAsync)
 import Ouroboros.Consensus.Util.ResourceRegistry (withRegistry)
 import System.IO (Handle, hFlush, stdout)
+import Text.Read (readMaybe)
 
 data DBServerLog = HttpServerLog HttpServerLog | DBLog (TraceEvent StandardBlock)
   deriving stock (Eq, Show, Generic)
@@ -98,9 +107,30 @@ withDB configurationFile databaseDir tracer k = do
     ChainDB.withDB chainDbArgs $ \chainDB -> k chainDB
 
 app :: ChainDB IO StandardBlock -> Application
-app _db _req send = send response
+app db req send =
+  case pathInfo req of
+    [slot, hash, "header"] -> handleGetHeader slot hash
+    _ -> send responseNotFound
  where
-  response = responseLBS status200 [] "Hello, world!"
+  responseNotFound = responseLBS status404 [] ""
+
+  responseBadRequest = responseLBS status400 [] ""
+
+  handleGetHeader slot hash = do
+    case makePoint slot hash of
+      Nothing -> send responseBadRequest
+      Just point ->
+        getBlockComponent db GetRawHeader point >>= \case
+          Just header -> send $ responseLBS status200 [("content-type", "application/text")] (LHex.encode header)
+          Nothing -> send responseNotFound
+
+makePoint :: Text -> Text -> Maybe (RealPoint StandardBlock)
+makePoint slotTxt hashTxt =
+  readMaybe (Text.unpack slotTxt)
+    >>= \(fromInteger -> slot) ->
+      case Hex.decode (encodeUtf8 hashTxt) of
+        Right bytes -> Just $ RealPoint slot (fromRawHash (Proxy @StandardBlock) bytes)
+        Left _ -> Nothing
 
 -- * Tracing
 withLog :: Handle -> (Tracer IO DBServerLog -> IO a) -> IO a

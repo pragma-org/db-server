@@ -8,6 +8,7 @@ import qualified Cardano.Tools.DBServer as DBServer
 import DBServer.Options (Options (..), optsParser)
 import Main.Utf8 (withStdTerminalHandles)
 import Options.Applicative
+import System.IO (stdout)
 
 main :: IO ()
 main = withStdTerminalHandles $
