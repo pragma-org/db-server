@@ -93,7 +93,7 @@ library
     network,
     network-mux,
     nothunks,
-    ouroboros-consensus ,
+    ouroboros-consensus,
     ouroboros-consensus-cardano,
     ouroboros-consensus-diffusion,
     ouroboros-consensus-protocol:unstable-protocol-testlib,

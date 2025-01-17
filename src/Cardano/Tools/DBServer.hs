@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -31,22 +32,34 @@ import Network.Socket (PortNumber)
 import Network.Wai (Application, Middleware, pathInfo, requestMethod, responseLBS, responseStatus)
 import qualified Network.Wai.Handler.Warp as Warp
 import Ouroboros.Consensus.Cardano (CardanoBlock)
-import Ouroboros.Consensus.Config (TopLevelConfig)
+import Ouroboros.Consensus.Config (TopLevelConfig, configStorage)
+import Ouroboros.Consensus.Fragment.InFuture (dontCheck)
+import qualified Ouroboros.Consensus.Node as Node
+import qualified Ouroboros.Consensus.Node.InitStorage as Node
 import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
+import Ouroboros.Consensus.Storage.ChainDB (ChainDB, TraceEvent, defaultArgs)
+import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
+import Ouroboros.Consensus.Storage.ChainDB.Impl.Args (completeChainDbArgs, updateTracer)
 import Ouroboros.Consensus.Util.IOLike (MonadSTM (writeTQueue), atomically, newTQueueIO, readTQueue, withAsync)
+import Ouroboros.Consensus.Util.ResourceRegistry (withRegistry)
 import System.IO (hFlush, stdout)
 
-data DBServerLog = HttpServerLog HttpServerLog
+data DBServerLog = HttpServerLog HttpServerLog | DBLog (TraceEvent StandardBlock)
     deriving stock (Eq, Show, Generic)
-    deriving anyclass (ToJSON, FromJSON)
+
+instance ToJSON DBServerLog where
+    toJSON = \case
+        HttpServerLog l -> object ["tag" .= ("HttpServer" :: Text), "log" .= toJSON l]
+        DBLog l -> object ["tag" .= ("ChainDB" :: Text), "log" .= show l]
 
 run :: Tracer IO DBServerLog -> PortNumber -> String -> FilePath -> FilePath -> IO ()
-run tracer (fromIntegral -> port) host configurationFile _databaseDirectory = do
+run tracer (fromIntegral -> port) host configurationFile databaseDirectory = do
     let args = CardanoBlockArgs configurationFile Nothing
-    ProtocolInfo{pInfoConfig} <- mkProtocolInfo args
-    Warp.runSettings settings $
-        tracerMiddleware tr $
-            app pInfoConfig
+    protocolInfo <- mkProtocolInfo args
+    withDB protocolInfo databaseDirectory (contramap DBLog tracer) $ \db ->
+        Warp.runSettings settings $
+            tracerMiddleware tr $
+                app db
   where
     tr = contramap HttpServerLog tracer
     settings =
@@ -60,8 +73,32 @@ run tracer (fromIntegral -> port) host configurationFile _databaseDirectory = do
 
 type StandardBlock = CardanoBlock StandardCrypto
 
-app :: TopLevelConfig StandardBlock -> Application
-app _config _req send = send response
+withDB ::
+    ProtocolInfo StandardBlock ->
+    FilePath ->
+    Tracer IO (TraceEvent StandardBlock) ->
+    (ChainDB IO StandardBlock -> IO ()) ->
+    IO ()
+withDB pInfo databaseDir tracer k = do
+    withRegistry $ \registry -> do
+        let ProtocolInfo{pInfoInitLedger = genesisLedger, pInfoConfig = cfg} = pInfo
+        let chunkInfo = Node.nodeImmutableDbChunkInfo (configStorage cfg)
+            chainDbArgs =
+                updateTracer tracer $
+                    completeChainDbArgs
+                        registry
+                        dontCheck
+                        cfg
+                        genesisLedger
+                        chunkInfo
+                        (const True)
+                        (Node.stdMkChainDbHasFS databaseDir)
+                        (Node.stdMkChainDbHasFS databaseDir)
+                        defaultArgs
+        ChainDB.withDB chainDbArgs $ \chainDB -> k chainDB
+
+app :: ChainDB IO StandardBlock -> Application
+app _db _req send = send response
   where
     response = responseLBS status200 [] "Hello, world!"
 
