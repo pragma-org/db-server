@@ -137,12 +137,18 @@ test-suite db-server-test
   type: exitcode-stdio-1.0
   hs-source-dirs: test
   main-is: Main.hs
+  other-modules:
+    Cardano.Tools.DBServerSpec
   build-depends:
     QuickCheck,
     aeson,
     base,
+    directory,
     hspec,
+    hspec-wai,
     text,
     db-server,
+    unix,
+    wai
   build-tool-depends:
     hspec-discover:hspec-discover

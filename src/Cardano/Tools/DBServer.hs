@@ -8,7 +8,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Cardano.Tools.DBServer (run, DBServerLog (..), withLog) where
+module Cardano.Tools.DBServer (run, DBServerLog (..), withLog, withDB, app) where
 
 import Cardano.Ledger.Api (StandardCrypto)
 import Cardano.Tools.DBAnalyser.Block.Cardano (Args (CardanoBlockArgs))
@@ -42,124 +42,124 @@ import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
 import Ouroboros.Consensus.Storage.ChainDB.Impl.Args (completeChainDbArgs, updateTracer)
 import Ouroboros.Consensus.Util.IOLike (MonadSTM (writeTQueue), atomically, newTQueueIO, readTQueue, withAsync)
 import Ouroboros.Consensus.Util.ResourceRegistry (withRegistry)
-import System.IO (hFlush, stdout)
+import System.IO (Handle, hFlush, stdout)
 
 data DBServerLog = HttpServerLog HttpServerLog | DBLog (TraceEvent StandardBlock)
-    deriving stock (Eq, Show, Generic)
+  deriving stock (Eq, Show, Generic)
 
 instance ToJSON DBServerLog where
-    toJSON = \case
-        HttpServerLog l -> object ["tag" .= ("HttpServer" :: Text), "log" .= toJSON l]
-        DBLog l -> object ["tag" .= ("ChainDB" :: Text), "log" .= show l]
+  toJSON = \case
+    HttpServerLog l -> object ["tag" .= ("HttpServer" :: Text), "log" .= toJSON l]
+    DBLog l -> object ["tag" .= ("ChainDB" :: Text), "log" .= show l]
 
 run :: Tracer IO DBServerLog -> PortNumber -> String -> FilePath -> FilePath -> IO ()
 run tracer (fromIntegral -> port) host configurationFile databaseDirectory = do
-    let args = CardanoBlockArgs configurationFile Nothing
-    protocolInfo <- mkProtocolInfo args
-    withDB protocolInfo databaseDirectory (contramap DBLog tracer) $ \db ->
-        Warp.runSettings settings $
-            tracerMiddleware tr $
-                app db
-  where
-    tr = contramap HttpServerLog tracer
-    settings =
-        Warp.defaultSettings
-            & Warp.setPort port
-            & Warp.setHost (fromString host)
-            & Warp.setServerName "db-server"
-            & Warp.setTimeout 120
-            & Warp.setMaximumBodyFlush Nothing
-            & Warp.setBeforeMainLoop (traceWith tr HttpServerListening{host, port})
+  withDB configurationFile databaseDirectory (contramap DBLog tracer) $ \db ->
+    Warp.runSettings settings $
+      tracerMiddleware tr $
+        app db
+ where
+  tr = contramap HttpServerLog tracer
+  settings =
+    Warp.defaultSettings
+      & Warp.setPort port
+      & Warp.setHost (fromString host)
+      & Warp.setServerName "db-server"
+      & Warp.setTimeout 120
+      & Warp.setMaximumBodyFlush Nothing
+      & Warp.setBeforeMainLoop (traceWith tr HttpServerListening{host, port})
 
 type StandardBlock = CardanoBlock StandardCrypto
 
 withDB ::
-    ProtocolInfo StandardBlock ->
-    FilePath ->
-    Tracer IO (TraceEvent StandardBlock) ->
-    (ChainDB IO StandardBlock -> IO ()) ->
-    IO ()
-withDB pInfo databaseDir tracer k = do
-    withRegistry $ \registry -> do
-        let ProtocolInfo{pInfoInitLedger = genesisLedger, pInfoConfig = cfg} = pInfo
-        let chunkInfo = Node.nodeImmutableDbChunkInfo (configStorage cfg)
-            chainDbArgs =
-                updateTracer tracer $
-                    completeChainDbArgs
-                        registry
-                        dontCheck
-                        cfg
-                        genesisLedger
-                        chunkInfo
-                        (const True)
-                        (Node.stdMkChainDbHasFS databaseDir)
-                        (Node.stdMkChainDbHasFS databaseDir)
-                        defaultArgs
-        ChainDB.withDB chainDbArgs $ \chainDB -> k chainDB
+  FilePath ->
+  FilePath ->
+  Tracer IO (TraceEvent StandardBlock) ->
+  (ChainDB IO StandardBlock -> IO a) ->
+  IO a
+withDB configurationFile databaseDir tracer k = do
+  let args = CardanoBlockArgs configurationFile Nothing
+  protocolInfo <- mkProtocolInfo args
+  withRegistry $ \registry -> do
+    let ProtocolInfo{pInfoInitLedger = genesisLedger, pInfoConfig = cfg} = protocolInfo
+    let chunkInfo = Node.nodeImmutableDbChunkInfo (configStorage cfg)
+        chainDbArgs =
+          updateTracer tracer $
+            completeChainDbArgs
+              registry
+              dontCheck
+              cfg
+              genesisLedger
+              chunkInfo
+              (const True)
+              (Node.stdMkChainDbHasFS databaseDir)
+              (Node.stdMkChainDbHasFS databaseDir)
+              defaultArgs
+    ChainDB.withDB chainDbArgs $ \chainDB -> k chainDB
 
 app :: ChainDB IO StandardBlock -> Application
 app _db _req send = send response
-  where
-    response = responseLBS status200 [] "Hello, world!"
+ where
+  response = responseLBS status200 [] "Hello, world!"
 
 -- * Tracing
-withLog :: (Tracer IO DBServerLog -> IO ()) -> IO ()
-withLog k = do
-    logQueue <- newTQueueIO
-    let tracer =
-            Tracer $ \msg -> do
-                time <- getCurrentTime
-                let logged =
-                        case toJSON msg of
-                            Object o ->
-                                Object $ o <> KeyMap.fromList [("timestamp", toJSON time)]
-                            other -> object ["timestamp" .= time, "log" .= other]
-                atomically $ writeTQueue logQueue $ LBS.toStrict $ encode logged <> "\n"
+withLog :: Handle -> (Tracer IO DBServerLog -> IO a) -> IO a
+withLog hdl k = do
+  logQueue <- newTQueueIO
+  let tracer =
+        Tracer $ \msg -> do
+          time <- getCurrentTime
+          let logged =
+                case toJSON msg of
+                  Object o ->
+                    Object $ o <> KeyMap.fromList [("timestamp", toJSON time)]
+                  other -> object ["timestamp" .= time, "log" .= other]
+          atomically $ writeTQueue logQueue $ LBS.toStrict $ encode logged <> "\n"
 
-        runLogThread = forever $ do
-            msg <- atomically $ readTQueue logQueue
-            BS.hPutStr stdout msg
-            hFlush stdout
+      runLogThread = forever $ do
+        msg <- atomically $ readTQueue logQueue
+        BS.hPutStr hdl msg
+        hFlush hdl
 
-    withAsync runLogThread $
-        \_ -> k tracer
+  withAsync runLogThread $
+    \_ -> k tracer
 
 tracerMiddleware :: Tracer IO HttpServerLog -> Middleware
 tracerMiddleware tr runApp req send = do
-    start <- GHC.Clock.getMonotonicTimeNSec
-    traceWith tr HttpRequest{path, method}
-    runApp req $ \res -> do
-        result <- send res
-        end <- GHC.Clock.getMonotonicTimeNSec
-        let time = mkRequestTime start end
-        traceWith tr HttpResponse{status = mkStatus (responseStatus res), time}
-        pure result
-  where
-    method = decodeUtf8 (requestMethod req)
-    path = pathInfo req
+  start <- GHC.Clock.getMonotonicTimeNSec
+  traceWith tr HttpRequest{path, method}
+  runApp req $ \res -> do
+    result <- send res
+    end <- GHC.Clock.getMonotonicTimeNSec
+    let time = mkRequestTime start end
+    traceWith tr HttpResponse{status = mkStatus (responseStatus res), time}
+    pure result
+ where
+  method = decodeUtf8 (requestMethod req)
+  path = pathInfo req
 
 mkStatus :: Status -> HttpStatus
 mkStatus status =
-    HttpStatus{code, message}
-  where
-    code = statusCode status
-    message = decodeUtf8 (statusMessage status)
+  HttpStatus{code, message}
+ where
+  code = statusCode status
+  message = decodeUtf8 (statusMessage status)
 
 newtype RequestTime = RequestTime {milliseconds :: Word64}
-    deriving stock (Eq, Generic, Show)
-    deriving newtype (ToJSON, FromJSON)
+  deriving stock (Eq, Generic, Show)
+  deriving newtype (ToJSON, FromJSON)
 
 mkRequestTime :: Word64 -> Word64 -> RequestTime
 mkRequestTime start end =
-    RequestTime $ (end - start) `div` 1_000_000
+  RequestTime $ (end - start) `div` 1_000_000
 
 data HttpStatus = HttpStatus {code :: Int, message :: Text}
-    deriving stock (Eq, Generic, Show)
-    deriving anyclass (ToJSON, FromJSON)
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (ToJSON, FromJSON)
 
 data HttpServerLog
-    = HttpServerListening {host :: String, port :: Int}
-    | HttpRequest {path :: [Text], method :: Text}
-    | HttpResponse {status :: HttpStatus, time :: RequestTime}
-    deriving stock (Eq, Show, Generic)
-    deriving anyclass (ToJSON, FromJSON)
+  = HttpServerListening {host :: String, port :: Int}
+  | HttpRequest {path :: [Text], method :: Text}
+  | HttpResponse {status :: HttpStatus, time :: RequestTime}
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)

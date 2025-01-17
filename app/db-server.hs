@@ -11,7 +11,7 @@ import Options.Applicative
 
 main :: IO ()
 main = withStdTerminalHandles $
-    DBServer.withLog $ \tracer -> do
-        cryptoInit
-        Options{configurationFile, host, port, databaseDirectory} <- execParser optsParser
-        DBServer.run tracer port host configurationFile databaseDirectory
+  DBServer.withLog stdout $ \tracer -> do
+    cryptoInit
+    Options{configurationFile, host, port, databaseDirectory} <- execParser optsParser
+    DBServer.run tracer port host configurationFile databaseDirectory
