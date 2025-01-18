@@ -33,7 +33,6 @@ common common-lib
     -Wpartial-fields
     -Widentities
     -Wredundant-constraints
-    -Wmissing-export-lists
     -Wunused-packages
     -Wno-unticked-promoted-constructors
 
@@ -139,15 +138,19 @@ test-suite db-server-test
   main-is: Main.hs
   other-modules:
     Cardano.Tools.DBServerSpec
+    Cardano.Tools.TestHelper
   build-depends:
     QuickCheck,
     aeson,
     base,
+    db-server,
     directory,
+    filepath,
     hspec,
     http-types,
+    mtl,
+    temporary,
     text,
-    db-server,
     unix,
     wai,
     wai-extra

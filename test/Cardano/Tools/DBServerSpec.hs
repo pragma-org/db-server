@@ -3,12 +3,14 @@
 module Cardano.Tools.DBServerSpec where
 
 import Cardano.Tools.DBServer (DBServerLog (..), tracerMiddleware, webApp, withDB, withLog)
+import Cardano.Tools.TestHelper (withLogFile, withTempDir)
 import Data.Functor.Contravariant (contramap)
 import Data.String (fromString)
 import qualified Data.Text as Text
 import Network.HTTP.Types (status200, status400, status404)
 import Network.Wai (Application, Request (..), defaultRequest)
 import Network.Wai.Test (SResponse, Session, request, runSession, simpleBody, simpleStatus)
+import System.FilePath ((</>))
 import System.IO (Handle)
 import System.Posix.Temp (mkstemp)
 import Test.Hspec (Spec, aroundAll, describe, it, shouldBe)
@@ -66,13 +68,16 @@ testConfigFile = "test-data/config/config.json"
 testDatabaseDir :: FilePath
 testDatabaseDir = "test-data/test-db"
 
--- FIXME: This does not work obviously because the withXXX terminate when we return the Application
+-- FIXME: The logs are always deleted, but we would like to keep them in case
+-- of failures.
+-- see https://github.com/hspec/hspec/issues/907
 mkApp :: (Application -> IO ()) -> IO ()
 mkApp k = do
-  (_, hdl) <- createLog
-  withLog hdl $ \tr ->
-    withDB testConfigFile testDatabaseDir (contramap DBLog tr) $ \db -> do
-      k $ tracerMiddleware (contramap HttpServerLog tr) $ webApp db
+  withTempDir "test-db-server" $ \dir -> do
+    withLogFile (dir </> "db-server.log") $ \hdl ->
+      withLog hdl $ \tr ->
+        withDB testConfigFile testDatabaseDir (contramap DBLog tr) $ \db -> do
+          k $ tracerMiddleware (contramap HttpServerLog tr) $ webApp db
 
-createLog :: IO (FilePath, Handle)
-createLog = mkstemp "test-db-server"
+createLog :: FilePath -> IO (FilePath, Handle)
+createLog dir = mkstemp (dir </> "db-server.log")
