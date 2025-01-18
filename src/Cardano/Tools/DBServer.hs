@@ -9,7 +9,14 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Cardano.Tools.DBServer (run, DBServerLog (..), withLog, withDB, app) where
+module Cardano.Tools.DBServer (
+  run,
+  DBServerLog (..),
+  withLog,
+  withDB,
+  webApp,
+  tracerMiddleware,
+) where
 
 import Cardano.Crypto (unsafeHashFromBytes)
 import Cardano.Ledger.Api (StandardCrypto)
@@ -66,7 +73,7 @@ run tracer (fromIntegral -> port) host configurationFile databaseDirectory = do
   withDB configurationFile databaseDirectory (contramap DBLog tracer) $ \db ->
     Warp.runSettings settings $
       tracerMiddleware tr $
-        app db
+        webApp db
  where
   tr = contramap HttpServerLog tracer
   settings =
@@ -106,8 +113,8 @@ withDB configurationFile databaseDir tracer k = do
               defaultArgs
     ChainDB.withDB chainDbArgs $ \chainDB -> k chainDB
 
-app :: ChainDB IO StandardBlock -> Application
-app db req send =
+webApp :: ChainDB IO StandardBlock -> Application
+webApp db req send =
   case pathInfo req of
     [slot, hash, "header"] -> handleGetHeader slot hash
     _ -> send responseNotFound

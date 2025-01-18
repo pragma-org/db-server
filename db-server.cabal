@@ -145,10 +145,11 @@ test-suite db-server-test
     base,
     directory,
     hspec,
-    hspec-wai,
+    http-types,
     text,
     db-server,
     unix,
-    wai
+    wai,
+    wai-extra
   build-tool-depends:
     hspec-discover:hspec-discover
