@@ -90,7 +90,7 @@ runShake so pwd uid = shakeArgs options $ do
     installDir <- liftIO $ getXdgDirectory XdgData ""
     cmd_ "cabal" ["update"]
     command_ [AddEnv "PKG_CONFIG_PATH" (installDir </> "lib" </> "pkgconfig")] "cabal" ["build", "all"]
-    cmd_ "cabal" ["test", "all"]
+    command_ [AddEnv "LD_LIBRARY_PATH" (installDir </> "lib")] "cabal" ["test", "all"]
     Stdout exePath <- cmd "cabal" ["list-bin", "db-server"]
     dirExists <- doesDirectoryExist "bin"
     unless dirExists $ cmd_ "mkdir" ["bin"]
