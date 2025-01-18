@@ -29,7 +29,9 @@ options =
       shakeThreads = 0
     , -- Put Shake's database in directory '_build'
       shakeFiles = "_build"
-    , shakeVerbosity = Diagnostic
+    , shakeVerbosity = Verbose
+    , shakeProgress = progressDisplay 5 putStrLn
+    , shakeCommandOptions = [EchoStdout True]
     }
 
 install :: IO ()

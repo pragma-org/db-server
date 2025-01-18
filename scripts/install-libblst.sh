@@ -27,6 +27,10 @@ Version: ${BLST_VERSION#v}
 Cflags: -I\${includedir}
 Libs: -L\${libdir} -lblst
 EOF
+
+[[ -d "$prefix/lib/pkgconfig/" ]] || mkdir -p "$prefix/lib/pkgconfig/"
+[[ -d "$prefix/include/" ]] || mkdir -p "$prefix/include/"
+
 cp libblst.pc $prefix/lib/pkgconfig/
 cp bindings/blst_aux.h bindings/blst.h bindings/blst.hpp $prefix/include/
 cp libblst.a $prefix/lib
