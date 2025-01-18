@@ -98,3 +98,4 @@ cabal.project.local
 cabal.project.local~
 .HTF/
 .ghc.environment.*
+/_build/
