@@ -33,12 +33,9 @@ jobs:
           ${{ runner.os }}-build-
           ${{ runner.os }}-
 
-    - name: Install dependencies
+    - name: Build
       run: |
         ./build.hs
-
-    - name: Build
-      run: cabal build --enable-tests --enable-benchmarks all
 
     - name: Run tests
       run: cabal test all

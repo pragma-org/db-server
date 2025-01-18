@@ -12,9 +12,10 @@ import Control.Monad (forM_, unless)
 import Data.Functor
 import Data.Maybe
 import Development.Shake
-import System.Directory (getCurrentDirectory)
+import System.Directory (XdgDirectory (..), getCurrentDirectory, getXdgDirectory)
 import System.Environment (getArgs, lookupEnv, withArgs)
 import System.FilePath
+import System.Info (os)
 import System.Posix.User (getRealUserID)
 
 -- | Id of current user
@@ -28,7 +29,7 @@ options =
       shakeThreads = 0
     , -- Put Shake's database in directory '_build'
       shakeFiles = "_build"
-      --    , shakeVerbosity = Diagnostic
+    , shakeVerbosity = Diagnostic
     }
 
 install :: IO ()
@@ -41,7 +42,8 @@ install = do
 
 runShake :: FilePath -> UID -> IO ()
 runShake pwd uid = shakeArgs options $ do
-  let needHaskellSources = do
+  let defaultNodeVersion = "10.1.4"
+      needHaskellSources = do
         needDirectoryFiles
           "."
           [ "src//*.hs"
@@ -51,12 +53,41 @@ runShake pwd uid = shakeArgs options $ do
           ]
         need ["db-server.cabal", "cabal.project"]
 
+      needDependencies = do
+        installDir <- liftIO $ getXdgDirectory XdgData ""
+        let dllExtension = case os of
+              "darwin" -> "dylib"
+              _ -> "so"
+        need
+          [ installDir </> "lib" </> "libsodium" <.> dllExtension
+          , installDir </> "lib" </> "libsecp256k1" <.> dllExtension
+          , installDir </> "lib" </> "libblst.a"
+          ]
+
   want ["bin/db-server"]
 
+  "//libsodium.dylib" %> \lib -> do
+    nodeVersion <- getEnvWithDefault defaultNodeVersion "CARDANO_NODE_VERSION"
+    installDir <- liftIO $ getXdgDirectory XdgData ""
+    cmd_ "scripts/install-libsodium.sh" [installDir, nodeVersion]
+
+  "//libsecp256k1.dylib" %> \lib -> do
+    nodeVersion <- getEnvWithDefault defaultNodeVersion "CARDANO_NODE_VERSION"
+    installDir <- liftIO $ getXdgDirectory XdgData ""
+    cmd_ "scripts/install-libsecp256k1.sh" [installDir, nodeVersion]
+
+  "//libblst.a" %> \lib -> do
+    nodeVersion <- getEnvWithDefault defaultNodeVersion "CARDANO_NODE_VERSION"
+    installDir <- liftIO $ getXdgDirectory XdgData ""
+    cmd_ "scripts/install-libblst.sh" [installDir, nodeVersion]
+
   "bin/db-server" %> \bin -> do
+    needDependencies
     needHaskellSources
+    needDependencies
+    installDir <- liftIO $ getXdgDirectory XdgData ""
     cmd_ "cabal" ["update"]
-    cmd_ "cabal" ["build", "all"]
+    command_ [AddEnv "PKG_CONFIG_PATH" installDir] "cabal" ["build", "all"]
     cmd_ "cabal" ["test", "all"]
     Stdout exePath <- cmd "cabal" ["list-bin", "db-server"]
     dirExists <- doesDirectoryExist "bin"
