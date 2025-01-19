@@ -85,6 +85,7 @@ runShake pwd uid = shakeArgs options $ do
     needHaskellSources
     needDependencies
     installDir <- liftIO $ getXdgDirectory XdgData ""
+    cmd_ "find" [installDir </> "lib"]
     cmd_ "cabal" ["update"]
     command_
       [AddEnv "PKG_CONFIG_PATH" (installDir </> "lib" </> "pkgconfig")]
