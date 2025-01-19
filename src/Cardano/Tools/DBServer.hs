@@ -52,7 +52,7 @@ import Ouroboros.Consensus.Fragment.InFuture (dontCheck)
 import qualified Ouroboros.Consensus.Node as Node
 import qualified Ouroboros.Consensus.Node.InitStorage as Node
 import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
-import Ouroboros.Consensus.Storage.ChainDB (BlockComponent (GetRawHeader), ChainDB, TraceEvent, defaultArgs, getBlockComponent)
+import Ouroboros.Consensus.Storage.ChainDB (BlockComponent (..), ChainDB, TraceEvent, defaultArgs, getBlockComponent)
 import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
 import Ouroboros.Consensus.Storage.ChainDB.Impl.Args (completeChainDbArgs, updateTracer)
 import Ouroboros.Consensus.Util.IOLike (MonadSTM (writeTQueue), atomically, newTQueueIO, readTQueue, withAsync)
@@ -116,6 +116,7 @@ withDB configurationFile databaseDir tracer k = do
 webApp :: ChainDB IO StandardBlock -> Application
 webApp db req send =
   case pathInfo req of
+    [slot, hash] -> handleGetBlock slot hash
     [slot, hash, "header"] -> handleGetHeader slot hash
     _ -> send responseNotFound
  where
@@ -128,6 +129,14 @@ webApp db req send =
       Nothing -> send responseBadRequest
       Just point ->
         getBlockComponent db GetRawHeader point >>= \case
+          Just header -> send $ responseLBS status200 [("content-type", "application/text")] (LHex.encode header)
+          Nothing -> send responseNotFound
+
+  handleGetBlock slot hash = do
+    case makePoint slot hash of
+      Nothing -> send responseBadRequest
+      Just point ->
+        getBlockComponent db GetRawBlock point >>= \case
           Just header -> send $ responseLBS status200 [("content-type", "application/text")] (LHex.encode header)
           Nothing -> send responseNotFound
 
