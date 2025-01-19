@@ -11,8 +11,15 @@ permissions:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        os: [ linux, macos ]
+        arch: [ x86_64, aarch64 ]
+        exclude:
+          - os: macos
+            arch: x86_64
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.arch == 'x86_64' && 'buildjet-4vcpu-ubuntu-2204' || (matrix.os == 'linux' && 'buildjet-16vcpu-ubuntu-2204-arm' || 'macos-latest') }}
 
     steps:
     - name: 📥 Checkout code
@@ -32,11 +39,11 @@ jobs:
         path: |
           ~/.cabal
           ~/.local
-        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
         restore-keys: |
-          ${{ runner.os }}-build-${{ env.cache-name }}-
-          ${{ runner.os }}-build-
-          ${{ runner.os }}-
+          ${{ runner.os }}-${{ runner.arch }}-build-${{ env.cache-name }}-
+          ${{ runner.os }}-${{ runner.arch }}-build-
+          ${{ runner.os }}-${{ runner.arch }}-
 
     - name: 🛠 Build
       run: |
