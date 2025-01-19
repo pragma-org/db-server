@@ -55,6 +55,21 @@ spec =
         simpleStatus response `shouldBe` status200
         simpleBody response `shouldBe` fromString testBlockHex
 
+      it "returns 404 given requested block hash does not exist" $ \app -> do
+        response <- runSession (getHeader "295/beff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7") app
+
+        simpleStatus response `shouldBe` status404
+
+      it "returns 400 given requested block hash is malformed" $ \app -> do
+        response <- runSession (getHeader "295/malformed") app
+
+        simpleStatus response `shouldBe` status400
+
+      it "returns 400 given requested slot is malformed" $ \app -> do
+        response <- runSession (getHeader "not-a-number/eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7") app
+
+        simpleStatus response `shouldBe` status400
+
 -- | Perform a GET request to the given path and return the response
 -- `path` must be absolute, i.e. start with a slash character
 getHeader :: Text.Text -> Session SResponse

@@ -64,3 +64,17 @@ The last entry above with the `HttpServerListening` signals the database is open
 % curl -v http://localhost:9003/69206375/6f99b5f3deaeae8dc43fce3db2f3cd36ad8ed174ca3400b5b1bed76fdf248912/header
 828a1a0028375b1a0420016758209694aa14a063868d37c5601b7b...
 ```
+
+#### Retrieve block bytes
+
+* `GET /:slot/:hash`: Retrieves raw hex-encoded CBOR bytes of a block at given `:slot` and with given `:hash` (aka. _point_)
+  * `200` : Returns hex-encoded bytes for the block serialised as CBOR
+  * `400` : Wrongly formatted `:slot` or `:hash` paths
+  * `404` : No block exists at given point
+
+**Example** (result is truncated for legibility, and the block is empty):
+
+```
+% curl -v http://localhost:9003/69206375/6f99b5f3deaeae8dc43fce3db2f3cd36ad8ed174ca3400b5b1bed76fdf248912
+820685828a0c19012...8080a080
+```
