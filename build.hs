@@ -89,7 +89,10 @@ runShake so pwd uid = shakeArgs options $ do
     needDependencies
     installDir <- liftIO $ getXdgDirectory XdgData ""
     cmd_ "cabal" ["update"]
-    command_ [AddEnv "PKG_CONFIG_PATH" (installDir </> "lib" </> "pkgconfig")] "cabal" ["build", "all"]
+    command_
+      [AddEnv "PKG_CONFIG_PATH" (installDir </> "lib" </> "pkgconfig")]
+      "cabal"
+      ["build", "all", "--ghc-options", "-L" <> installDir </> "lib" <> " -lsodium -lblst -lsecp256k1"]
     command_
       [ AddEnv "LD_LIBRARY_PATH" (installDir </> "lib")
       , AddEnv "DYLD_FALLBACK_LIBRARY_PATH" (installDir </> "lib")

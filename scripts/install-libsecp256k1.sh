@@ -14,6 +14,6 @@ echo "Using secp256k1 version: ${SECP256K1_VERSION}"
 git clone --depth 1 --branch ${SECP256K1_VERSION} https://github.com/bitcoin-core/secp256k1
 cd secp256k1
 ./autogen.sh
-./configure --enable-module-schnorrsig --enable-experimental --prefix=$prefix
+./configure --enable-module-schnorrsig --enable-experimental --prefix=$prefix --enable-shared=no
 make
 make install

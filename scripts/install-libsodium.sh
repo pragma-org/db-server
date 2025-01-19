@@ -14,6 +14,6 @@ cd libsodium
 git checkout $SODIUM_VERSION
 ./autogen.sh
 # install in local user directory
-./configure --prefix=${prefix}
+./configure --prefix=${prefix} --enable-shared=no
 make
 make install
