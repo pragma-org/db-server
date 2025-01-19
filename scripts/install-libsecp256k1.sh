@@ -11,7 +11,7 @@ SECP256K1_VERSION=$(curl https://raw.githubusercontent.com/input-output-hk/iohk-
 echo "Using secp256k1 version: ${SECP256K1_VERSION}"
 
 : ${SECP256K1_VERSION:='v0.3.2'}
-git clone --depth 1 --branch ${SECP256K1_VERSION} https://github.com/bitcoin-core/secp256k1
+[[ -d secp256k1 ]] || git clone --depth 1 --branch ${SECP256K1_VERSION} https://github.com/bitcoin-core/secp256k1
 cd secp256k1
 ./autogen.sh
 ./configure --enable-module-schnorrsig --enable-experimental --prefix=$prefix --enable-shared=no

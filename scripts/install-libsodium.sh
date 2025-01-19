@@ -9,7 +9,7 @@ SODIUM_VERSION=$(curl -L https://raw.githubusercontent.com/input-output-hk/iohk-
 echo "Using sodium version: $SODIUM_VERSION"
 
 : ${SODIUM_VERSION:='dbb48cc'}
-git clone https://github.com/intersectmbo/libsodium
+[[ -d libsodium ]] || git clone https://github.com/intersectmbo/libsodium
 cd libsodium
 git checkout $SODIUM_VERSION
 ./autogen.sh
