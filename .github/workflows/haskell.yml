@@ -45,6 +45,11 @@ jobs:
           ${{ runner.os }}-${{ runner.arch }}-build-
           ${{ runner.os }}-${{ runner.arch }}-
 
+    - name: 🚄 Prepare OS
+      if: ${{ matrix.os == 'macos' }}
+      run: |
+        brew install autoconf automake libtool
+
     - name: 🛠 Build
       run: |
         find ~/.local
