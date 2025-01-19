@@ -40,4 +40,5 @@ jobs:
 
     - name: 🛠 Build
       run: |
+        find ~/.local
         ./build.hs
