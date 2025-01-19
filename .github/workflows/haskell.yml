@@ -25,6 +25,18 @@ jobs:
     - name: 📥 Checkout code
       uses: actions/checkout@v4
 
+    - name: ✅ Tag build artifacts
+      id: tag
+      shell: bash
+      run: |
+        if [ "${GITHUB_REF/refs\/tags\//}" == "refs/heads/main"  ]; then
+          echo "value=$GIT_SHA" >> $GITHUB_OUTPUT
+        else
+          echo "value=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
+        fi
+      env:
+        GIT_SHA: ${{ github.sha }}
+
     - name: 🏗 Setup GHC
       uses: haskell-actions/setup@v2
       with:
@@ -53,3 +65,10 @@ jobs:
     - name: 🛠 Build
       run: |
         ./build.hs
+
+    - name: 🚢 Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: db-server-${{ steps.tag.outputs.value }}-${{ matrix.arch }}-${{ matrix.os }}
+        path: |
+          bin/db-server
