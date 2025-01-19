@@ -40,13 +40,10 @@ install = do
   uid <- show . toInteger <$> getRealUserID
   putStrLn $ "Building db-server in directory " <> pwd <> " as user " <> uid
   args <- getArgs
-  let dllExtension = case os of
-        "darwin" -> "dylib"
-        _ -> "so"
-  withArgs args $ runShake dllExtension pwd uid
+  withArgs args $ runShake pwd uid
 
-runShake :: String -> FilePath -> UID -> IO ()
-runShake so pwd uid = shakeArgs options $ do
+runShake :: FilePath -> UID -> IO ()
+runShake pwd uid = shakeArgs options $ do
   let defaultNodeVersion = "10.1.4"
       needHaskellSources = do
         needDirectoryFiles
@@ -61,19 +58,19 @@ runShake so pwd uid = shakeArgs options $ do
       needDependencies = do
         installDir <- liftIO $ getXdgDirectory XdgData ""
         need
-          [ installDir </> "lib" </> "libsodium" <.> so
-          , installDir </> "lib" </> "libsecp256k1" <.> so
+          [ installDir </> "lib" </> "libsodium.a"
+          , installDir </> "lib" </> "libsecp256k1.a"
           , installDir </> "lib" </> "libblst.a"
           ]
 
   want ["bin/db-server"]
 
-  ("//libsodium" <.> so) %> \lib -> do
+  "//libsodium.a" %> \lib -> do
     nodeVersion <- getEnvWithDefault defaultNodeVersion "CARDANO_NODE_VERSION"
     installDir <- liftIO $ getXdgDirectory XdgData ""
     cmd_ "scripts/install-libsodium.sh" [installDir, nodeVersion]
 
-  ("//libsecp256k1" <.> so) %> \lib -> do
+  "//libsecp256k1.a" %> \lib -> do
     nodeVersion <- getEnvWithDefault defaultNodeVersion "CARDANO_NODE_VERSION"
     installDir <- liftIO $ getXdgDirectory XdgData ""
     cmd_ "scripts/install-libsecp256k1.sh" [installDir, nodeVersion]
