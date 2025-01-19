@@ -2,6 +2,8 @@
 
 A ReST-ish server to expose Cardano-node's DB.
 
+![CI Build](https://github.com/pragma-org/db-server/actions/workflows/haskell.yml/badge.svg?branch=main)
+
 ## Build
 
 ### Prerequisites
