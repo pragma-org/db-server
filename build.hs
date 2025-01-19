@@ -85,15 +85,16 @@ runShake pwd uid = shakeArgs options $ do
     needHaskellSources
     needDependencies
     installDir <- liftIO $ getXdgDirectory XdgData ""
-    cmd_ "find" [installDir </> "lib"]
+    let libDirectory = installDir </> "lib"
+    liftIO $ removeFiles installDir ["//*.so", "//*.dylib"]
     cmd_ "cabal" ["update"]
     command_
-      [AddEnv "PKG_CONFIG_PATH" (installDir </> "lib" </> "pkgconfig")]
+      [AddEnv "PKG_CONFIG_PATH" (libDirectory </> "pkgconfig")]
       "cabal"
-      ["build", "all", "--ghc-options", "-L" <> installDir </> "lib" <> " -lsodium -lblst -lsecp256k1"]
+      ["build", "all", "--ghc-options", "-L" <> libDirectory <> " -lsodium -lblst -lsecp256k1"]
     command_
-      [ AddEnv "LD_LIBRARY_PATH" (installDir </> "lib")
-      , AddEnv "DYLD_FALLBACK_LIBRARY_PATH" (installDir </> "lib")
+      [ AddEnv "LD_LIBRARY_PATH" libDirectory
+      , AddEnv "DYLD_FALLBACK_LIBRARY_PATH" libDirectory
       ]
       "cabal"
       ["test", "all"]

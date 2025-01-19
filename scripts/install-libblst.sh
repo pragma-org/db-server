@@ -11,7 +11,7 @@ BLST_VERSION=$(curl https://raw.githubusercontent.com/input-output-hk/iohk-nix/$
 echo "Using blst version: ${BLST_VERSION}"
 
 : ${BLST_VERSION:='v0.3.11'}
-git clone --depth 1 --branch ${BLST_VERSION} https://github.com/supranational/blst
+[[ -d blst ]] || git clone --depth 1 --branch ${BLST_VERSION} https://github.com/supranational/blst
 cd blst
 ./build.sh
 cat >libblst.pc <<EOF
