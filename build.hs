@@ -91,7 +91,7 @@ runShake pwd uid = shakeArgs options $ do
     command_
       [AddEnv "PKG_CONFIG_PATH" (libDirectory </> "pkgconfig")]
       "cabal"
-      ["build", "all", "--ghc-options", "-L" <> libDirectory <> " -lsodium -lblst -lsecp256k1"]
+      ["build", "all", "--ghc-options", "-L" <> libDirectory <> " -lsodium -lblst -lsecp256k1 -fPIC"]
     command_
       [ AddEnv "LD_LIBRARY_PATH" libDirectory
       , AddEnv "DYLD_FALLBACK_LIBRARY_PATH" libDirectory
