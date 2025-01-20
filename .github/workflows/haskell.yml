@@ -65,10 +65,11 @@ jobs:
     - name: 🛠 Build
       run: |
         ./build.hs
+        tar cvf artifact.tar -C bin db-server
 
-    - name: 🚢 Upload artifact
-      uses: actions/upload-artifact@v3
+    - name: 🚢 Upload archive
+      uses: actions/upload-artifact@v4.4.0
       with:
         name: db-server-${{ steps.tag.outputs.value }}-${{ matrix.arch }}-${{ matrix.os }}
-        path: |
-          bin/db-server
+        path: artifact.tar
+        overwrite: true
