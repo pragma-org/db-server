@@ -18,9 +18,7 @@ module Cardano.Tools.DBServer (
   tracerMiddleware,
 ) where
 
-import Cardano.Crypto (unsafeHashFromBytes)
 import Cardano.Ledger.Api (StandardCrypto)
-import Cardano.Protocol.TPraos.BHeader (HashHeader (HashHeader))
 import Cardano.Tools.DBAnalyser.Block.Cardano (Args (CardanoBlockArgs))
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import Control.Monad (forever)
@@ -44,10 +42,10 @@ import Network.HTTP.Types (Status, status200, status400, status404, statusCode, 
 import Network.Socket (PortNumber)
 import Network.Wai (Application, Middleware, pathInfo, requestMethod, responseLBS, responseStatus)
 import qualified Network.Wai.Handler.Warp as Warp
-import Ouroboros.Consensus.Block (ConvertRawHash (fromRawHash), Proxy (..))
+import Ouroboros.Consensus.Block (ChainHash (..), ConvertRawHash (fromRawHash), Proxy (..), headerPrevHash, toRawHash)
 import Ouroboros.Consensus.Block.RealPoint
 import Ouroboros.Consensus.Cardano (CardanoBlock)
-import Ouroboros.Consensus.Config (TopLevelConfig, configStorage)
+import Ouroboros.Consensus.Config (configStorage)
 import Ouroboros.Consensus.Fragment.InFuture (dontCheck)
 import qualified Ouroboros.Consensus.Node as Node
 import qualified Ouroboros.Consensus.Node.InitStorage as Node
@@ -57,7 +55,7 @@ import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
 import Ouroboros.Consensus.Storage.ChainDB.Impl.Args (completeChainDbArgs, updateTracer)
 import Ouroboros.Consensus.Util.IOLike (MonadSTM (writeTQueue), atomically, newTQueueIO, readTQueue, withAsync)
 import Ouroboros.Consensus.Util.ResourceRegistry (withRegistry)
-import System.IO (Handle, hFlush, stdout)
+import System.IO (Handle, hFlush)
 import Text.Read (readMaybe)
 
 data DBServerLog = HttpServerLog HttpServerLog | DBLog (TraceEvent StandardBlock)
@@ -118,6 +116,7 @@ webApp db req send =
   case pathInfo req of
     [slot, hash] -> handleGetBlock slot hash
     [slot, hash, "header"] -> handleGetHeader slot hash
+    [slot, hash, "header", "parent"] -> handleGetParent slot hash
     _ -> send responseNotFound
  where
   responseNotFound = responseLBS status404 [] ""
@@ -130,6 +129,18 @@ webApp db req send =
       Just point ->
         getBlockComponent db GetRawHeader point >>= \case
           Just header -> send $ responseLBS status200 [("content-type", "application/text")] (LHex.encode header)
+          Nothing -> send responseNotFound
+
+  handleGetParent slot hash = do
+    case makePoint slot hash of
+      Nothing -> send responseBadRequest
+      Just point ->
+        getBlockComponent db GetHeader point >>= \case
+          Just header ->
+            case headerPrevHash header of
+              BlockHash headerHash ->
+                handleGetHeader slot (decodeUtf8 $ Hex.encode $ toRawHash (Proxy @StandardBlock) headerHash)
+              GenesisHash -> send responseNotFound
           Nothing -> send responseNotFound
 
   handleGetBlock slot hash = do
