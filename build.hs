@@ -32,6 +32,7 @@ options =
     , shakeVerbosity = Verbose
     , shakeProgress = progressDisplay 5 putStrLn
     , shakeCommandOptions = [EchoStdout True]
+    , shakeChange = ChangeDigest
     }
 
 install :: IO ()
