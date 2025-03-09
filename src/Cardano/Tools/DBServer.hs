@@ -19,6 +19,8 @@ module Cardano.Tools.DBServer (
 ) where
 
 import Cardano.Ledger.Api (StandardCrypto)
+import Cardano.Ledger.Binary (serialize, serialize')
+import Cardano.Slotting.Slot (SlotNo, WithOrigin (At))
 import Cardano.Tools.DBAnalyser.Block.Cardano (Args (CardanoBlockArgs))
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import Control.Monad (forever)
@@ -28,14 +30,18 @@ import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Hex
 import qualified Data.ByteString.Base16.Lazy as LHex
+import qualified Data.ByteString.Base64.Lazy as Base64
 import qualified Data.ByteString.Lazy as LBS
 import Data.Function ((&))
+import Data.SOP.NS (index_NS)
+import Data.SOP.Telescope (tip)
 import Data.String (fromString)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Time.Clock (getCurrentTime)
 import Data.Word (Word64)
+import Debug.Trace (trace)
 import qualified GHC.Clock
 import GHC.Generics (Generic)
 import Network.HTTP.Types (Status, status200, status400, status404, statusCode, statusMessage)
@@ -45,16 +51,23 @@ import qualified Network.Wai.Handler.Warp as Warp
 import Ouroboros.Consensus.Block (ChainHash (..), ConvertRawHash (fromRawHash), Proxy (..), headerPrevHash, toRawHash)
 import Ouroboros.Consensus.Block.RealPoint
 import Ouroboros.Consensus.Cardano (CardanoBlock)
+import Ouroboros.Consensus.Cardano.Block (LedgerState (..))
 import Ouroboros.Consensus.Config (configStorage)
 import Ouroboros.Consensus.Fragment.InFuture (dontCheck)
+import Ouroboros.Consensus.HardFork.Combinator (LedgerState (hardForkLedgerStatePerEra), getHardForkState)
+import Ouroboros.Consensus.Ledger.Extended (ExtLedgerState (ledgerState))
 import qualified Ouroboros.Consensus.Node as Node
 import qualified Ouroboros.Consensus.Node.InitStorage as Node
 import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
+import Ouroboros.Consensus.Shelley.Ledger (LedgerState (shelleyLedgerState))
 import Ouroboros.Consensus.Storage.ChainDB (BlockComponent (..), ChainDB, TraceEvent, defaultArgs, getBlockComponent)
 import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
 import Ouroboros.Consensus.Storage.ChainDB.Impl.Args (completeChainDbArgs, updateTracer)
+import Ouroboros.Consensus.Storage.LedgerDB (Checkpoint (unCheckpoint), LedgerDB (..))
 import Ouroboros.Consensus.Util.IOLike (MonadSTM (writeTQueue), atomically, newTQueueIO, readTQueue, withAsync)
 import Ouroboros.Consensus.Util.ResourceRegistry (withRegistry)
+import Ouroboros.Network.AnchoredSeq (lookupByMeasure)
+import qualified Ouroboros.Network.AnchoredSeq as Seq
 import System.IO (Handle, hFlush)
 import Text.Read (readMaybe)
 
@@ -114,6 +127,7 @@ withDB configurationFile databaseDir tracer k = do
 webApp :: ChainDB IO StandardBlock -> Application
 webApp db req send =
   case pathInfo req of
+    [slot, "snapshot"] -> handleGetSnapshot slot
     [slot, hash] -> handleGetBlock slot hash
     [slot, hash, "header"] -> handleGetHeader slot hash
     [slot, hash, "header", "parent"] -> handleGetParent slot hash
@@ -130,6 +144,23 @@ webApp db req send =
         getBlockComponent db GetRawHeader point >>= \case
           Just header -> send $ responseLBS status200 [("content-type", "application/text")] (LHex.encode header)
           Nothing -> send responseNotFound
+
+  handleGetSnapshot slotTxt =
+    case makeSlot slotTxt of
+      Nothing -> send responseBadRequest
+      Just slot -> do
+        LedgerDB{ledgerDbCheckpoints} <- atomically $ ChainDB.getLedgerDB db
+        case lookupByMeasure (At slot) ledgerDbCheckpoints of
+          [snapshot] ->
+            case ledgerState $ unCheckpoint snapshot of
+              LedgerStateBabbage state ->
+                send $
+                  responseLBS
+                    status200
+                    [("content-type", "application/json")]
+                    (Base64.encode $ serialize (toEnum 10) $ shelleyLedgerState state)
+              other -> send responseNotFound
+          other -> send responseNotFound
 
   handleGetParent slot hash = do
     case makePoint slot hash of
@@ -150,6 +181,9 @@ webApp db req send =
         getBlockComponent db GetRawBlock point >>= \case
           Just header -> send $ responseLBS status200 [("content-type", "application/text")] (LHex.encode header)
           Nothing -> send responseNotFound
+
+makeSlot :: Text -> Maybe SlotNo
+makeSlot slotTxt = fromInteger <$> readMaybe (Text.unpack slotTxt)
 
 makePoint :: Text -> Text -> Maybe (RealPoint StandardBlock)
 makePoint slotTxt hashTxt =

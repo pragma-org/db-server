@@ -13,7 +13,7 @@ import Network.Wai.Test (SResponse, Session, request, runSession, simpleBody, si
 import System.FilePath ((</>))
 import System.IO (Handle)
 import System.Posix.Temp (mkstemp)
-import Test.Hspec (Spec, aroundAll, describe, it, shouldBe)
+import Test.Hspec (Spec, aroundAll, describe, it, shouldBe, shouldNotBe)
 
 spec :: Spec
 spec =
@@ -76,6 +76,18 @@ spec =
 
         simpleStatus response `shouldBe` status200
         simpleBody response `shouldBe` fromString testParentHex
+
+    describe "GET /:slot/:hash/snapshot" $ do
+      it "returns hex-encoded CBOR ledger snapshot at slot/hash given it exists" $ \app -> do
+        response <- runSession (getHeader "16426/snapshot") app
+
+        simpleStatus response `shouldBe` status200
+        simpleBody response `shouldNotBe` ""
+
+      it "returns 404 given no state exists at given slot" $ \app -> do
+        response <- runSession (getHeader "16421/snapshot") app
+
+        simpleStatus response `shouldBe` status404
 
 -- | Perform a GET request to the given path and return the response
 -- `path` must be absolute, i.e. start with a slash character
