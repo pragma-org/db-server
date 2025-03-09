@@ -1,38 +1,47 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 module Cardano.Tools.DBServer (
   run,
   DBServerLog (..),
+  StandardPoint,
   withLog,
   withDB,
   webApp,
   tracerMiddleware,
 ) where
 
+import Cardano.Crypto.Hash (hashToBytes, hashToBytesShort)
 import Cardano.Ledger.Api (StandardCrypto)
 import Cardano.Ledger.Binary (serialize, serialize')
-import Cardano.Slotting.Slot (SlotNo, WithOrigin (At))
+import Cardano.Slotting.Slot (SlotNo, WithOrigin (..))
 import Cardano.Tools.DBAnalyser.Block.Cardano (Args (CardanoBlockArgs))
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import Control.Monad (forever)
 import Control.Tracer (Tracer (..), contramap, traceWith)
-import Data.Aeson (FromJSON, ToJSON, Value (..), encode, object, toJSON, (.=))
+import Data.Aeson (FromJSON (..), ToJSON, Value (..), encode, object, toJSON, (.:), (.=))
 import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Hex
 import qualified Data.ByteString.Base16.Lazy as LHex
 import qualified Data.ByteString.Base64.Lazy as Base64
 import qualified Data.ByteString.Lazy as LBS
+import Data.Coerce (coerce)
 import Data.Function ((&))
+import Data.SOP (hmap)
 import Data.SOP.NS (index_NS)
 import Data.SOP.Telescope (tip)
 import Data.String (fromString)
@@ -48,18 +57,19 @@ import Network.HTTP.Types (Status, status200, status400, status404, statusCode, 
 import Network.Socket (PortNumber)
 import Network.Wai (Application, Middleware, pathInfo, requestMethod, responseLBS, responseStatus)
 import qualified Network.Wai.Handler.Warp as Warp
-import Ouroboros.Consensus.Block (ChainHash (..), ConvertRawHash (fromRawHash), Proxy (..), headerPrevHash, toRawHash)
+import Ouroboros.Consensus.Block (ChainHash (..), ConvertRawHash (fromRawHash), Proxy (..), headerPrevHash, toRawHash, toShortRawHash)
 import Ouroboros.Consensus.Block.RealPoint
 import Ouroboros.Consensus.Cardano (CardanoBlock)
 import Ouroboros.Consensus.Cardano.Block (LedgerState (..))
 import Ouroboros.Consensus.Config (configStorage)
 import Ouroboros.Consensus.Fragment.InFuture (dontCheck)
-import Ouroboros.Consensus.HardFork.Combinator (LedgerState (hardForkLedgerStatePerEra), getHardForkState)
+import Ouroboros.Consensus.HardFork.Combinator (LedgerState (hardForkLedgerStatePerEra), OneEraHash (..), getHardForkState)
 import Ouroboros.Consensus.Ledger.Extended (ExtLedgerState (ledgerState))
 import qualified Ouroboros.Consensus.Node as Node
 import qualified Ouroboros.Consensus.Node.InitStorage as Node
 import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
-import Ouroboros.Consensus.Shelley.Ledger (LedgerState (shelleyLedgerState))
+import Ouroboros.Consensus.Shelley.Ledger (LedgerState (shelleyLedgerState), ShelleyTip (..), shelleyLedgerTip)
+import Ouroboros.Consensus.Shelley.Protocol.Abstract (ShelleyHash (..))
 import Ouroboros.Consensus.Storage.ChainDB (BlockComponent (..), ChainDB, TraceEvent, defaultArgs, getBlockComponent)
 import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
 import Ouroboros.Consensus.Storage.ChainDB.Impl.Args (completeChainDbArgs, updateTracer)
@@ -98,6 +108,22 @@ run tracer (fromIntegral -> port) host configurationFile databaseDirectory = do
 
 type StandardBlock = CardanoBlock StandardCrypto
 
+type StandardPoint = RealPoint StandardBlock
+
+instance ToJSON StandardPoint where
+  toJSON (RealPoint slot hash) =
+    object ["slot" .= slot, "hash" .= decodeUtf8 (Hex.encode $ toRawHash (Proxy @StandardBlock) hash)]
+
+instance FromJSON StandardPoint where
+  parseJSON = \case
+    Object o -> do
+      slot <- o .: "slot"
+      hash <- o .: "hash"
+      case Hex.decode (encodeUtf8 hash) of
+        Right bytes -> pure $ RealPoint slot (fromRawHash (Proxy @StandardBlock) bytes)
+        Left _ -> fail "cannot decode hash"
+    _ -> fail "expected object"
+
 withDB ::
   FilePath ->
   FilePath ->
@@ -127,6 +153,7 @@ withDB configurationFile databaseDir tracer k = do
 webApp :: ChainDB IO StandardBlock -> Application
 webApp db req send =
   case pathInfo req of
+    ["snapshots"] -> handleGetSnapshots
     [slot, "snapshot"] -> handleGetSnapshot slot
     [slot, hash] -> handleGetBlock slot hash
     [slot, hash, "header"] -> handleGetHeader slot hash
@@ -136,6 +163,16 @@ webApp db req send =
   responseNotFound = responseLBS status404 [] ""
 
   responseBadRequest = responseLBS status400 [] ""
+
+  handleGetSnapshots = do
+    LedgerDB{ledgerDbCheckpoints} <- atomically $ ChainDB.getLedgerDB db
+    let snapshotsList :: [LedgerState StandardBlock] = ledgerState . unCheckpoint <$> Seq.toOldestFirst ledgerDbCheckpoints
+        snapshotsPoints :: [StandardPoint] = pointOfState <$> snapshotsList
+    send $
+      responseLBS
+        status200
+        [("content-type", "application/json")]
+        (encode snapshotsPoints)
 
   handleGetHeader slot hash = do
     case makePoint slot hash of
@@ -181,6 +218,21 @@ webApp db req send =
         getBlockComponent db GetRawBlock point >>= \case
           Just header -> send $ responseLBS status200 [("content-type", "application/text")] (LHex.encode header)
           Nothing -> send responseNotFound
+
+pointOfState :: LedgerState StandardBlock -> StandardPoint
+pointOfState = \case
+  LedgerStateBabbage state ->
+    case shelleyLedgerTip state of
+      At shelleyTip ->
+        RealPoint
+          (shelleyTipSlotNo shelleyTip)
+          ( fromRawHash (Proxy @StandardBlock)
+              . hashToBytes
+              . unShelleyHash @StandardCrypto
+              $ shelleyTipHash shelleyTip
+          )
+      Origin -> error "ledger state is at origin"
+  LedgerStateByron _ -> error "byron snapshots are not supported"
 
 makeSlot :: Text -> Maybe SlotNo
 makeSlot slotTxt = fromInteger <$> readMaybe (Text.unpack slotTxt)

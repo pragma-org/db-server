@@ -1,9 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Cardano.Tools.DBServerSpec where
 
-import Cardano.Tools.DBServer (DBServerLog (..), tracerMiddleware, webApp, withDB, withLog)
+import Cardano.Tools.DBServer (DBServerLog (..), StandardPoint, tracerMiddleware, webApp, withDB, withLog)
 import Cardano.Tools.TestHelper (withLogFile, withTempDir)
+import Data.Aeson (decode)
 import Data.Functor.Contravariant (contramap)
 import Data.String (fromString)
 import qualified Data.Text as Text
@@ -88,6 +90,13 @@ spec =
         response <- runSession (getHeader "16421/snapshot") app
 
         simpleStatus response `shouldBe` status404
+
+    describe "GET /snapshots" $ do
+      it "returns list of points for which snapshots are available" $ \app -> do
+        response <- runSession (getHeader "snapshots") app
+
+        simpleStatus response `shouldBe` status200
+        length <$> decode @[StandardPoint] (simpleBody response) `shouldBe` Just 2160
 
 -- | Perform a GET request to the given path and return the response
 -- `path` must be absolute, i.e. start with a slash character
