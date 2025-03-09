@@ -8,6 +8,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -18,6 +19,8 @@ module Cardano.Tools.DBServer (
   run,
   DBServerLog (..),
   StandardPoint,
+  asInteger,
+  pattern StandardPoint,
   withLog,
   withDB,
   webApp,
@@ -27,7 +30,7 @@ module Cardano.Tools.DBServer (
 import Cardano.Crypto.Hash (hashToBytes, hashToBytesShort)
 import Cardano.Ledger.Api (StandardCrypto)
 import Cardano.Ledger.Binary (serialize, serialize')
-import Cardano.Slotting.Slot (SlotNo, WithOrigin (..))
+import Cardano.Slotting.Slot (SlotNo (..), WithOrigin (..))
 import Cardano.Tools.DBAnalyser.Block.Cardano (Args (CardanoBlockArgs))
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import Control.Monad (forever)
@@ -58,6 +61,7 @@ import Network.Socket (PortNumber)
 import Network.Wai (Application, Middleware, pathInfo, requestMethod, responseLBS, responseStatus)
 import qualified Network.Wai.Handler.Warp as Warp
 import Ouroboros.Consensus.Block (ChainHash (..), ConvertRawHash (fromRawHash), Proxy (..), headerPrevHash, toRawHash, toShortRawHash)
+import Ouroboros.Consensus.Block.Abstract (HeaderHash)
 import Ouroboros.Consensus.Block.RealPoint
 import Ouroboros.Consensus.Cardano (CardanoBlock)
 import Ouroboros.Consensus.Cardano.Block (LedgerState (..))
@@ -108,7 +112,13 @@ run tracer (fromIntegral -> port) host configurationFile databaseDirectory = do
 
 type StandardBlock = CardanoBlock StandardCrypto
 
+asInteger :: SlotNo -> Integer
+asInteger (SlotNo slot) = fromIntegral slot
+
 type StandardPoint = RealPoint StandardBlock
+
+pattern StandardPoint :: SlotNo -> HeaderHash StandardBlock -> StandardPoint
+pattern StandardPoint slot hash = RealPoint slot hash
 
 instance ToJSON StandardPoint where
   toJSON (RealPoint slot hash) =
@@ -154,7 +164,7 @@ webApp :: ChainDB IO StandardBlock -> Application
 webApp db req send =
   case pathInfo req of
     ["snapshots"] -> handleGetSnapshots
-    [slot, "snapshot"] -> handleGetSnapshot slot
+    ["snapshots", slot] -> handleGetSnapshot slot
     [slot, hash] -> handleGetBlock slot hash
     [slot, hash, "header"] -> handleGetHeader slot hash
     [slot, hash, "header", "parent"] -> handleGetParent slot hash
@@ -196,8 +206,8 @@ webApp db req send =
                     status200
                     [("content-type", "application/json")]
                     (Base64.encode $ serialize (toEnum 10) $ shelleyLedgerState state)
-              other -> send responseNotFound
-          other -> send responseNotFound
+              _other -> send responseNotFound
+          _other -> send responseNotFound
 
   handleGetParent slot hash = do
     case makePoint slot hash of

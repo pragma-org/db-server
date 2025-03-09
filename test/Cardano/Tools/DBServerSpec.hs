@@ -1,9 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Cardano.Tools.DBServerSpec where
 
-import Cardano.Tools.DBServer (DBServerLog (..), StandardPoint, tracerMiddleware, webApp, withDB, withLog)
+import Cardano.Tools.DBServer (DBServerLog (..), StandardPoint, asInteger, tracerMiddleware, webApp, withDB, withLog, pattern StandardPoint)
 import Cardano.Tools.TestHelper (withLogFile, withTempDir)
 import Data.Aeson (decode)
 import Data.Functor.Contravariant (contramap)
@@ -16,6 +17,8 @@ import System.FilePath ((</>))
 import System.IO (Handle)
 import System.Posix.Temp (mkstemp)
 import Test.Hspec (Spec, aroundAll, describe, it, shouldBe, shouldNotBe)
+import Test.QuickCheck (counterexample, elements, property)
+import Test.QuickCheck.Monadic (assert, monadicIO, monitor, pick, run)
 
 spec :: Spec
 spec =
@@ -79,15 +82,15 @@ spec =
         simpleStatus response `shouldBe` status200
         simpleBody response `shouldBe` fromString testParentHex
 
-    describe "GET /:slot/:hash/snapshot" $ do
+    describe "GET /snapshots/:slot" $ do
       it "returns hex-encoded CBOR ledger snapshot at slot/hash given it exists" $ \app -> do
-        response <- runSession (getHeader "16426/snapshot") app
+        response <- runSession (getHeader "snapshots/16426") app
 
         simpleStatus response `shouldBe` status200
         simpleBody response `shouldNotBe` ""
 
       it "returns 404 given no state exists at given slot" $ \app -> do
-        response <- runSession (getHeader "16421/snapshot") app
+        response <- runSession (getHeader "snapshots/16421") app
 
         simpleStatus response `shouldBe` status404
 
@@ -97,6 +100,16 @@ spec =
 
         simpleStatus response `shouldBe` status200
         length <$> decode @[StandardPoint] (simpleBody response) `shouldBe` Just 2160
+
+      it "any element from the list can be retrieved" $ \app ->
+        property $ monadicIO $ do
+          response <- run $ runSession (getHeader "snapshots") app
+          let Just snapshots = decode @[StandardPoint] (simpleBody response)
+          StandardPoint slot _ <- pick $ elements snapshots
+
+          monitor $ counterexample $ show slot
+          snapshot <- run $ runSession (getHeader $ "snapshots/ " <> Text.pack (show $ asInteger slot)) app
+          assert $ simpleStatus snapshot == status200
 
 -- | Perform a GET request to the given path and return the response
 -- `path` must be absolute, i.e. start with a slash character
