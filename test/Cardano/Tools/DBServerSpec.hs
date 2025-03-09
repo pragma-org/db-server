@@ -25,59 +25,59 @@ spec =
   -- NOTE: Opening the ChainDB takes some time, so we do it only once for all tests
   -- This is fine as long as we don't write to the database
   aroundAll mkApp $ do
-    describe "GET /:slot/:hash/header" $ do
+    describe "GET /blocks/:slot/:hash/header" $ do
       it "returns block header in hex-encoded CBOR given it exists" $ \app -> do
-        response <- runSession (getHeader "295/eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7/header") app
+        response <- runSession (getHeader "blocks/295/eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7/header") app
 
         simpleStatus response `shouldBe` status200
         simpleBody response `shouldBe` fromString testHeaderHex
 
       it "returns block header in hex-encoded CBOR given hash is correct but slot is not" $ \app -> do
-        response <- runSession (getHeader "296/eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7/header") app
+        response <- runSession (getHeader "blocks/296/eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7/header") app
 
         simpleStatus response `shouldBe` status200
         simpleBody response `shouldBe` fromString testHeaderHex
 
       it "returns 404 given requested block hash does not exist" $ \app -> do
-        response <- runSession (getHeader "295/beff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7/header") app
+        response <- runSession (getHeader "blocks/295/beff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7/header") app
 
         simpleStatus response `shouldBe` status404
 
       it "returns 400 given requested block hash is malformed" $ \app -> do
-        response <- runSession (getHeader "295/malformed/header") app
+        response <- runSession (getHeader "blocks/295/malformed/header") app
 
         simpleStatus response `shouldBe` status400
 
       it "returns 400 given requested slot is malformed" $ \app -> do
-        response <- runSession (getHeader "not-a-number/eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7/header") app
+        response <- runSession (getHeader "blocks/not-a-number/eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7/header") app
 
         simpleStatus response `shouldBe` status400
 
-    describe "GET /:slot/:hash" $ do
+    describe "GET /blocks/:slot/:hash" $ do
       it "returns full block in hex-encoded CBOR given it exists" $ \app -> do
-        response <- runSession (getHeader "295/eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7") app
+        response <- runSession (getHeader "blocks/295/eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7") app
 
         simpleStatus response `shouldBe` status200
         simpleBody response `shouldBe` fromString testBlockHex
 
       it "returns 404 given requested block hash does not exist" $ \app -> do
-        response <- runSession (getHeader "295/beff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7") app
+        response <- runSession (getHeader "blocks/295/beff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7") app
 
         simpleStatus response `shouldBe` status404
 
       it "returns 400 given requested block hash is malformed" $ \app -> do
-        response <- runSession (getHeader "295/malformed") app
+        response <- runSession (getHeader "blocks/295/malformed") app
 
         simpleStatus response `shouldBe` status400
 
       it "returns 400 given requested slot is malformed" $ \app -> do
-        response <- runSession (getHeader "not-a-number/eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7") app
+        response <- runSession (getHeader "blocks/not-a-number/eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7") app
 
         simpleStatus response `shouldBe` status400
 
-    describe "GET /:slot/:hash/header/parent" $ do
+    describe "GET /blocks/:slot/:hash/parent" $ do
       it "returns block header's parent in hex-encoded CBOR given it exists" $ \app -> do
-        response <- runSession (getHeader "295/eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7/header/parent") app
+        response <- runSession (getHeader "blocks/295/eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7/parent") app
 
         simpleStatus response `shouldBe` status200
         simpleBody response `shouldBe` fromString testParentHex

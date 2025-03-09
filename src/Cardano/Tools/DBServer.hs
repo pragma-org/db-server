@@ -14,6 +14,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Cardano.Tools.DBServer (
   run,
@@ -35,7 +36,7 @@ import Cardano.Tools.DBAnalyser.Block.Cardano (Args (CardanoBlockArgs))
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import Control.Monad (forever)
 import Control.Tracer (Tracer (..), contramap, traceWith)
-import Data.Aeson (FromJSON (..), ToJSON, Value (..), encode, object, toJSON, (.:), (.=))
+import Data.Aeson (FromJSON (..), ToJSON, Value (..), encode, object, toJSON, withObject, (.:), (.=))
 import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Hex
@@ -125,14 +126,12 @@ instance ToJSON StandardPoint where
     object ["slot" .= slot, "hash" .= decodeUtf8 (Hex.encode $ toRawHash (Proxy @StandardBlock) hash)]
 
 instance FromJSON StandardPoint where
-  parseJSON = \case
-    Object o -> do
-      slot <- o .: "slot"
-      hash <- o .: "hash"
-      case Hex.decode (encodeUtf8 hash) of
-        Right bytes -> pure $ RealPoint slot (fromRawHash (Proxy @StandardBlock) bytes)
-        Left _ -> fail "cannot decode hash"
-    _ -> fail "expected object"
+  parseJSON = withObject "StandardPoint" $ \o -> do
+    slot <- o .: "slot"
+    hash <- o .: "hash"
+    case Hex.decode (encodeUtf8 hash) of
+      Right bytes -> pure $ RealPoint slot (fromRawHash (Proxy @StandardBlock) bytes)
+      Left _ -> fail "cannot decode hash"
 
 withDB ::
   FilePath ->
@@ -165,9 +164,9 @@ webApp db req send =
   case pathInfo req of
     ["snapshots"] -> handleGetSnapshots
     ["snapshots", slot] -> handleGetSnapshot slot
-    [slot, hash] -> handleGetBlock slot hash
-    [slot, hash, "header"] -> handleGetHeader slot hash
-    [slot, hash, "header", "parent"] -> handleGetParent slot hash
+    ["blocks", slot, hash] -> handleGetBlock slot hash
+    ["blocks", slot, hash, "header"] -> handleGetHeader slot hash
+    ["blocks", slot, hash, "parent"] -> handleGetParent slot hash
     _ -> send responseNotFound
  where
   responseNotFound = responseLBS status404 [] ""
