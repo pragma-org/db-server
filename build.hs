@@ -87,7 +87,7 @@ runShake pwd uid = shakeArgs options $ do
     needDependencies
     installDir <- liftIO $ getXdgDirectory XdgData ""
     let libDirectory = installDir </> "lib"
-    liftIO $ removeFiles installDir ["//*.so", "//*.dylib"]
+    liftIO $ removeFiles libDirectory ["//*.so", "//*.dylib"]
     cmd_ "cabal" ["update"]
     command_
       [AddEnv "PKG_CONFIG_PATH" (libDirectory </> "pkgconfig")]

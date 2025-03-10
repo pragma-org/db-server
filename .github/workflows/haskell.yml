@@ -57,6 +57,10 @@ jobs:
           ${{ runner.os }}-${{ runner.arch }}-build-
           ${{ runner.os }}-${{ runner.arch }}-
 
+    - name: ❓ Check cache
+      run: |
+        find ~/.local
+
     - name: 🚄 Prepare OS
       if: ${{ matrix.os == 'macos' }}
       run: |
