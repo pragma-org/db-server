@@ -10,7 +10,7 @@ IOHKNIX_VERSION=$(curl -L https://raw.githubusercontent.com/IntersectMBO/cardano
 BLST_VERSION=$(curl https://raw.githubusercontent.com/input-output-hk/iohk-nix/$IOHKNIX_VERSION/flake.lock | jq -r '.nodes.blst.original.ref')
 echo "Using blst version: ${BLST_VERSION}"
 
-: ${BLST_VERSION:='v0.3.11'}
+: ${BLST_VERSION:='v0.3.14'}
 [[ -d blst ]] || git clone --depth 1 --branch ${BLST_VERSION} https://github.com/supranational/blst
 cd blst
 ./build.sh
