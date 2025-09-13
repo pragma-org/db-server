@@ -20,6 +20,7 @@ module Cardano.Tools.DBServer (
   run,
   DBServerLog (..),
   StandardPoint,
+  StandardBlock,
   asInteger,
   pattern StandardPoint,
   withLog,

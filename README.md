@@ -36,7 +36,7 @@ To run `db-server` over a `preprod` network database:
 Then from the source directory of `db-server`, starts the server with the following command:
 
 ```
-cabal run db-server -- --db db --config config/config.json
+cabal run db-server -- serve --db db --config config/config.json
 ```
 
 In the terminal, one should start seeing JSON-formatted log entries like:
@@ -55,7 +55,7 @@ The last entry above with the `HttpServerListening` signals the database is open
 
 #### Retrieve header bytes
 
-* `GET /:slot/:hash/header`: Retrieves raw hex-encoded bytes of a block header at given `:slot` and with given `:hash` (aka. _point_)
+* `GET /blocks/:slot/:hash/header`: Retrieves raw hex-encoded bytes of a block header at given `:slot` and with given `:hash` (aka. _point_)
   * `200` : Returns the raw hex-encoded bytes for header
   * `400` : Wrongly formatted `:slot` or `:hash` paths
   * `404` : No block exists at given point
@@ -69,7 +69,7 @@ The last entry above with the `HttpServerListening` signals the database is open
 
 #### Retrieve block bytes
 
-* `GET /:slot/:hash`: Retrieves raw hex-encoded CBOR bytes of a block at given `:slot` and with given `:hash` (aka. _point_)
+* `GET /blocks/:slot/:hash`: Retrieves raw hex-encoded CBOR bytes of a block at given `:slot` and with given `:hash` (aka. _point_)
   * `200` : Returns hex-encoded bytes for the block serialised as CBOR
   * `400` : Wrongly formatted `:slot` or `:hash` paths
   * `404` : No block exists at given point
