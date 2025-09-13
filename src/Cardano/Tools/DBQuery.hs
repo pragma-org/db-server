@@ -5,11 +5,11 @@
 module Cardano.Tools.DBQuery (runQuery) where
 
 import Ouroboros.Consensus.Storage.ChainDB (TraceEvent)
-import Cardano.Tools.DBServer (StandardBlock)
 import GHC.Generics (Generic)
 import Data.Aeson (ToJSON (..), (.=), object)
 import Data.Text (Text)
 import Control.Tracer (Tracer)
+import Cardano.Tools.DB (StandardBlock)
 
 data DBQueryLog = DBLog (TraceEvent StandardBlock)
   deriving stock (Eq, Show, Generic)

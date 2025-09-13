@@ -4,7 +4,8 @@
 
 module Cardano.Tools.DBServerSpec where
 
-import Cardano.Tools.DBServer (DBServerLog (..), StandardPoint, asInteger, tracerMiddleware, webApp, withDB, withLog, pattern StandardPoint)
+import Cardano.Tools.DB (StandardPoint, asInteger, withDB, pattern StandardPoint)
+import Cardano.Tools.DBServer (DBServerLog (..), tracerMiddleware, webApp, withLog)
 import Cardano.Tools.TestHelper (withLogFile, withTempDir)
 import Data.Aeson (decode)
 import Data.Functor.Contravariant (contramap)
@@ -117,8 +118,8 @@ getHeader :: Text.Text -> Session SResponse
 getHeader path = do
   let req =
         defaultRequest
-          { requestMethod = "GET"
-          , pathInfo = Text.splitOn "/" path
+          { requestMethod = "GET",
+            pathInfo = Text.splitOn "/" path
           }
   request req
 
