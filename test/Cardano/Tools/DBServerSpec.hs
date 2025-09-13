@@ -4,9 +4,9 @@
 
 module Cardano.Tools.DBServerSpec where
 
-import Cardano.Tools.DB (StandardPoint, asInteger, withDB, pattern StandardPoint)
+import Cardano.Tools.DB (StandardPoint, asInteger, pattern StandardPoint)
 import Cardano.Tools.DBServer (DBServerLog (..), tracerMiddleware, webApp, withLog)
-import Cardano.Tools.TestHelper (withLogFile, withTempDir)
+import Cardano.Tools.TestHelper (withLogFile, withTempDir, withTestDB)
 import Data.Aeson (decode)
 import Data.Functor.Contravariant (contramap)
 import Data.String (fromString)
@@ -15,8 +15,6 @@ import Network.HTTP.Types (status200, status400, status404)
 import Network.Wai (Application, Request (..), defaultRequest)
 import Network.Wai.Test (SResponse, Session, request, runSession, simpleBody, simpleStatus)
 import System.FilePath ((</>))
-import System.IO (Handle)
-import System.Posix.Temp (mkstemp)
 import Test.Hspec (Spec, aroundAll, describe, it, shouldBe, shouldNotBe)
 import Test.QuickCheck (counterexample, elements, property)
 import Test.QuickCheck.Monadic (assert, monadicIO, monitor, pick, run)
@@ -132,12 +130,6 @@ testBlockHex = "820685828a0c1901275820e5b1b73c5e7ee253e87d02a420352b8f6250b76688
 testParentHex :: String
 testParentHex = "828a0b19010b5820c02836ece740e898371eec4b583dcbc62d1e6f6048fbab2b2538ed48fc7c798b5820e41015edc7b39489226d27c51dbe84c636466b3e29758a95445297614a8050bf582006a90f0597762346dd9eee0017623aca4745105f75b6d0d44355b26395372934825840ca4c710be92db163e35d48064ea0866d37772bec0026dfb68d5cbce7f8e738f36c8b033ca1e46a08607289fa0dd4cbca55cda6f696e4241c8b450a942c90ebc45850748daafccf0cad01f2245d858ff95998234fee511c6038f4edb1b0f894ec387e16eb6c36d8fd750c3caa71fd5657dae2c5a3a0c5d05ca6de78b0deb4d9235ad117b507f5867771add6546757114e1a0704582029571d16f081709b3c48651860077bebf9340abb3fc7133443c54f1f5a5edcf1845820a5ae7caf7a79b7f750d3d6da9a31d6523bdc0b99cc9dbfbdc11122e3ae07e8280000584071c1947b93fac5684a327a102f522d7b31daccfe8ef69ed0c36ed4618910245756bfe607b5a2bf7725045564b77ee18bfd7ed086b957d856a5491b51fbaedf06820a005901c0b84aeb1fc570ca478bb9aa51ca234be2b0ce19798d01f2e5e5e914ab4d80831f29687ebd441ce7a78a84904eb45ccbfa62143cf8e6905e89b9b289d0e9a2b509de8e5249591afc25d214c024eac3c1186c26136a8719ca647c3c554aff75301df40a7243f0cea69d0da41b0edd95c35cc6644a433e1a59898f70a88b9578635cb4ee2e7a940b2aa19d596f5b160abc0f83c66cd8c26d8f7226f4556d4a406e0b978df024d42a1a9236d58e8c64733aae1ee6e3258a27bfaf060b6c2913fc9bab1cb543b0b471a48af5e367b75d856a36f5899c8019f91d321c22d012ee466e509d49ca12ed800448ad43ee1575de56abad60d0cd1d2bb9b541573504040c3b4943c077e1127e25a0bb1fb8549c503b519f01f6092a3d3452341da2fb8687e07b340575532fe529cadd9701c300770930c4da09feed3a7f9b4d1253efe0fd1dc05e380763e756b7f6b04d45d45e61aba849736babb9224adbf27a8880f1ecc23dd0bbe61a5b73fa269cc100bf3f6cbd17163f31d38aa22db320d37cbb767821dee4500627980856833e796e4435768172cb98b8b33ed5970a92ab3f046050c9f5aeeafa151f9d11b93c425b68cace42f87c51dee5f0a38071b3a8da23743d699c"
 
-testConfigFile :: FilePath
-testConfigFile = "test-data/config/config.json"
-
-testDatabaseDir :: FilePath
-testDatabaseDir = "test-data/test-db"
-
 -- FIXME: The logs are always deleted, but we would like to keep them in case
 -- of failures.
 -- see https://github.com/hspec/hspec/issues/907
@@ -146,8 +138,5 @@ mkApp k = do
   withTempDir "test-db-server" $ \dir -> do
     withLogFile (dir </> "db-server.log") $ \hdl ->
       withLog hdl $ \tr ->
-        withDB testConfigFile testDatabaseDir (contramap DBLog tr) $ \db -> do
+        withTestDB (contramap DBLog tr) $ \db -> do
           k $ tracerMiddleware (contramap HttpServerLog tr) $ webApp db
-
-createLog :: FilePath -> IO (FilePath, Handle)
-createLog dir = mkstemp (dir </> "db-server.log")

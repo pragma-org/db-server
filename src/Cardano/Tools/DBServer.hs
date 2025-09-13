@@ -10,12 +10,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Cardano.Tools.DBServer where
 
-import Cardano.Tools.DB (Result (..), StandardBlock, getBlock, getHeader, getParent, getSnapshot, getSnapshots, withDB)
+import Cardano.Tools.DB (Result (..), StandardBlock, getBlock, getHeader, getParent, getSnapshot, getSnapshots, makePoint, makeSlot, withDB)
 import Control.Monad (forever)
 import Control.Tracer (Tracer (..), contramap, traceWith)
 import Data.Aeson (FromJSON (..), ToJSON, Value (..), encode, object, toJSON, (.=))
@@ -86,32 +85,46 @@ webApp db req send =
             (encode snapshotsPoints)
 
     handleGetHeader slot hash =
-      getHeader db slot hash >>= \case
-        NotFound -> send responseNotFound
-        Malformed -> send $ responseLBS status400 [] "Malformed hash or slot"
-        Found header -> send $ responseLBS status200 [("content-type", "application/text")] (LHex.encode header)
+      case makePoint slot hash of
+        Nothing ->
+          send $ responseLBS status400 [] "Malformed hash or slot"
+        Just point ->
+          getHeader db point >>= \case
+            NotFound -> send responseNotFound
+            Found header -> send $ responseLBS status200 [("content-type", "application/text")] (LHex.encode header)
 
     handleGetSnapshot slot =
-      getSnapshot db slot >>= \case
-        Nothing -> send responseNotFound
-        Just snapshot ->
-          send $
-            responseLBS
-              status200
-              [("content-type", "application/json")]
-              (Base64.encode snapshot)
+      case makeSlot slot of
+        Nothing -> send $ responseLBS status400 [] "Malformed slot"
+        Just slot' ->
+          getSnapshot db slot' >>= \case
+            NotFound -> send responseNotFound
+            Found snapshot ->
+              send $
+                responseLBS
+                  status200
+                  [("content-type", "application/json")]
+                  (Base64.encode snapshot)
 
     handleGetParent slot hash =
-      getParent db slot hash >>= \case
-        NotFound -> send responseNotFound
-        Malformed -> send $ responseLBS status400 [] "Malformed hash or slot"
-        Found parent -> send $ responseLBS status200 [("content-type", "application/json")] (LHex.encode parent)
+      case makePoint slot hash of
+        Nothing ->
+          send $ responseLBS status400 [] "Malformed hash or slot"
+        Just point ->
+          getParent db point >>= \case
+            NotFound -> send responseNotFound
+            Malformed -> send $ responseLBS status400 [] "Malformed hash or slot"
+            Found parent -> send $ responseLBS status200 [("content-type", "application/json")] (LHex.encode parent)
 
     handleGetBlock slot hash = do
-      getBlock db slot hash >>= \case
-        NotFound -> send responseNotFound
-        Malformed -> send $ responseLBS status400 [] "Malformed hash or slot"
-        Found parent -> send $ responseLBS status200 [("content-type", "application/json")] (LHex.encode parent)
+      case makePoint slot hash of
+        Nothing ->
+          send $ responseLBS status400 [] "Malformed hash or slot"
+        Just point ->
+          getBlock db point >>= \case
+            NotFound -> send responseNotFound
+            Malformed -> send $ responseLBS status400 [] "Malformed hash or slot"
+            Found parent -> send $ responseLBS status200 [("content-type", "application/json")] (LHex.encode parent)
 
 -- * Tracing
 

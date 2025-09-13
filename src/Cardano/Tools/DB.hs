@@ -1,3 +1,4 @@
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
@@ -7,9 +8,29 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
-{-# LANGUAGE DerivingStrategies #-}
 
-module Cardano.Tools.DB where
+module Cardano.Tools.DB
+  ( StandardBlock,
+    StandardPoint,
+    pattern StandardPoint,
+    Result (..),
+    DB,
+    DBTrace,
+    SlotNo,
+    Hash,
+    asInteger,
+    withDB,
+    getHeader,
+    getParent,
+    getBlock,
+    getSnapshot,
+    getSnapshots,
+    parsePoint,
+    makePoint,
+    makeSlot,
+    mkPoint,
+  )
+where
 
 import Cardano.Crypto.Hash (hashToBytes)
 import Cardano.Ledger.Api (StandardCrypto)
@@ -24,6 +45,7 @@ import qualified Data.ByteString.Lazy as LBS
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
+import Data.Word (Word64)
 import Ouroboros.Consensus.Block (ChainHash (..), ConvertRawHash (fromRawHash), Proxy (..), headerPrevHash, toRawHash)
 import Ouroboros.Consensus.Block.Abstract (HeaderHash)
 import Ouroboros.Consensus.Block.RealPoint
@@ -54,8 +76,19 @@ asInteger (SlotNo slot) = fromIntegral slot
 
 type StandardPoint = RealPoint StandardBlock
 
+type Hash = HeaderHash StandardBlock
+
 pattern StandardPoint :: SlotNo -> HeaderHash StandardBlock -> StandardPoint
 pattern StandardPoint slot hash = RealPoint slot hash
+
+mkPoint :: Word64 -> Text -> StandardPoint
+mkPoint slot hash =
+  StandardPoint
+    (SlotNo slot)
+    ( fromRawHash (Proxy @StandardBlock) $
+        either error id $
+          Hex.decode (encodeUtf8 hash)
+    )
 
 instance ToJSON StandardPoint where
   toJSON (RealPoint slot hash) =
@@ -65,14 +98,21 @@ instance FromJSON StandardPoint where
   parseJSON = withObject "StandardPoint" $ \o -> do
     slot <- o .: "slot"
     hash <- o .: "hash"
-    case Hex.decode (encodeUtf8 hash) of
+    case Hex.decode
+      ( encodeUtf8
+          hash
+      ) of
       Right bytes -> pure $ RealPoint slot (fromRawHash (Proxy @StandardBlock) bytes)
       Left _ -> fail "cannot decode hash"
+
+type DBTrace = TraceEvent StandardBlock
+
+type DB = ChainDB IO StandardBlock
 
 withDB ::
   FilePath ->
   FilePath ->
-  Tracer IO (TraceEvent StandardBlock) ->
+  Tracer IO DBTrace ->
   (ChainDB IO StandardBlock -> IO a) ->
   IO a
 withDB configurationFile databaseDir tracer k = do
@@ -95,6 +135,12 @@ withDB configurationFile databaseDir tracer k = do
               defaultArgs
     ChainDB.withDB chainDbArgs $ \chainDB -> k chainDB
 
+parsePoint :: Text -> Maybe StandardPoint
+parsePoint txt =
+  case Text.splitOn "." txt of
+    [slotTxt, hashTxt] -> makePoint slotTxt hashTxt
+    _other -> Nothing
+
 makePoint :: Text -> Text -> Maybe (RealPoint StandardBlock)
 makePoint slotTxt hashTxt =
   readMaybe (Text.unpack slotTxt)
@@ -106,34 +152,23 @@ makePoint slotTxt hashTxt =
 data Result a = Malformed | NotFound | Found a
   deriving stock (Eq, Show)
 
-getHeader :: ChainDB IO StandardBlock -> Text -> Text -> IO (Result LBS.ByteString)
-getHeader db slot hash = do
-  case makePoint slot hash of
-    Nothing ->
-      return Malformed
-    Just point ->
-      maybe NotFound Found <$> getBlockComponent db GetRawHeader point
+getHeader :: ChainDB IO StandardBlock -> StandardPoint -> IO (Result LBS.ByteString)
+getHeader db point =
+  maybe NotFound Found <$> getBlockComponent db GetRawHeader point
 
-getParent :: ChainDB IO StandardBlock -> Text -> Text -> IO (Result LBS.ByteString)
-getParent db slot hash =
-  case makePoint slot hash of
-    Nothing -> pure Malformed
-    Just point ->
-      getBlockComponent db GetHeader point >>= \case
-        Nothing -> pure NotFound
-        Just header ->
-          case headerPrevHash header of
-            BlockHash headerHash ->
-              getHeader db slot (decodeUtf8 $ Hex.encode $ toRawHash (Proxy @StandardBlock) headerHash)
-            GenesisHash -> pure Malformed
+getParent :: ChainDB IO StandardBlock -> StandardPoint -> IO (Result LBS.ByteString)
+getParent db point =
+  getBlockComponent db GetHeader point >>= \case
+    Nothing -> pure NotFound
+    Just header ->
+      case headerPrevHash header of
+        BlockHash headerHash ->
+          getHeader db (RealPoint (SlotNo 0) headerHash) -- FIXME
+        GenesisHash -> pure Malformed
 
-getBlock :: ChainDB IO StandardBlock -> Text -> Text -> IO (Result LBS.ByteString)
-getBlock db slot hash =
-  case makePoint slot hash of
-    Nothing ->
-      pure Malformed
-    Just point ->
-      maybe NotFound Found <$> getBlockComponent db GetRawBlock point
+getBlock :: ChainDB IO StandardBlock -> StandardPoint -> IO (Result LBS.ByteString)
+getBlock db point =
+  maybe NotFound Found <$> getBlockComponent db GetRawBlock point
 
 pointOfState :: LedgerState StandardBlock -> StandardPoint
 pointOfState = \case
@@ -164,15 +199,13 @@ getSnapshots db = do
   let snapshotsList :: [LedgerState StandardBlock] = ledgerState . unCheckpoint <$> Seq.toOldestFirst ledgerDbCheckpoints
   pure $ pointOfState <$> snapshotsList
 
-getSnapshot :: ChainDB IO StandardBlock -> Text -> IO (Maybe LBS.ByteString)
-getSnapshot db slotTxt = case makeSlot slotTxt of
-  Nothing -> pure Nothing
-  Just slot -> do
-    LedgerDB {ledgerDbCheckpoints} <- atomically $ ChainDB.getLedgerDB db
-    case lookupByMeasure (At slot) ledgerDbCheckpoints of
-      [snapshot] ->
-        case ledgerState $ unCheckpoint snapshot of
-          LedgerStateBabbage state ->
-            pure $ Just $ serialize (toEnum 10) $ shelleyLedgerState state
-          _other -> pure Nothing
-      _other -> pure Nothing
+getSnapshot :: ChainDB IO StandardBlock -> SlotNo -> IO (Result LBS.ByteString)
+getSnapshot db slot = do
+  LedgerDB {ledgerDbCheckpoints} <- atomically $ ChainDB.getLedgerDB db
+  case lookupByMeasure (At slot) ledgerDbCheckpoints of
+    [snapshot] ->
+      case ledgerState $ unCheckpoint snapshot of
+        LedgerStateBabbage state ->
+          pure $ Found $ serialize (toEnum 10) $ shelleyLedgerState state
+        _other -> pure NotFound
+    _other -> pure NotFound

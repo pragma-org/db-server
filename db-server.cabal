@@ -103,6 +103,7 @@ test-suite db-server-test
   hs-source-dirs: test
   main-is: Main.hs
   other-modules:
+    Cardano.Tools.DBQuerySpec
     Cardano.Tools.DBServerSpec
     Cardano.Tools.DBServer.OptionsSpec
     Cardano.Tools.TestHelper
@@ -110,6 +111,7 @@ test-suite db-server-test
                 QuickCheck,
                 aeson,
                 base,
+                contra-tracer,
                 db-server,
                 directory,
                 filepath,
