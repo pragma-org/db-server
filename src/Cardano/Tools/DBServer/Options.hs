@@ -30,6 +30,7 @@ import Options.Applicative
     value,
   )
 import Test.QuickCheck (Arbitrary (..), elements)
+import Data.Text (Text)
 
 -- * Options
 
@@ -43,7 +44,7 @@ data QueryOptions = QueryOptions
   }
   deriving stock (Eq, Show)
 
-type Query = String
+type Query = Text
 
 data ServeOptions = ServeOptions
   { databaseDirectory :: FilePath,

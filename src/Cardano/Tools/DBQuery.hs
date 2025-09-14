@@ -9,6 +9,7 @@ module Cardano.Tools.DBQuery
     Query (..),
     Error (..),
     runQuery,
+    runDBQuery,
     parseQuery,
   )
 where
@@ -57,24 +58,25 @@ data Query
   | ListSnapshots
   deriving (Eq, Show)
 
-runQuery :: Tracer IO DBQueryLog -> FilePath -> FilePath -> Text -> IO (Either Error LBS.ByteString)
+runQuery :: Tracer IO DBQueryLog -> FilePath -> FilePath -> Text -> IO ()
 runQuery tracer configurationFile databaseDirectory query =
-  withDB configurationFile databaseDirectory (contramap DBLog tracer) $ \db -> do
-    case parseQuery query of
-      Left err -> pure $ Left err
-      Right q ->
-        runDBQuery db q >>= \case
-          NotFound -> return $ Left $ QueryError "Not found"
-          Malformed -> return $ Left $ QueryError "Malformed"
-          Found result -> return $ Right result
+  withDB configurationFile databaseDirectory (contramap DBLog tracer) $ \db ->
+    runDBQuery db query >>= \case
+      NotFound -> putStrLn $ "Not found"
+      Malformed -> putStrLn $ "Malformed"
+      Found result -> LBS.putStr result
 
-runDBQuery :: DB -> Query -> IO (Result LBS.ByteString)
-runDBQuery db = \case
-  GetBlock point -> getBlock db point
-  GetHeader point -> getHeader db point
-  GetParent point -> getParent db point
-  GetSnapshot slot -> getSnapshot db slot
-  ListSnapshots -> Found . Aeson.encode <$> getSnapshots db
+runDBQuery :: DB -> Text -> IO (Result LBS.ByteString)
+runDBQuery db query = do
+  case parseQuery query of
+    Left err -> pure $ Malformed
+    Right q ->
+      case q of
+        GetBlock point -> getBlock db point
+        GetHeader point -> getHeader db point
+        GetParent point -> getParent db point
+        GetSnapshot slot -> getSnapshot db slot
+        ListSnapshots -> Found . Aeson.encode <$> getSnapshots db
 
 parseQuery :: Text -> Either Error Query
 parseQuery str =
