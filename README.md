@@ -64,7 +64,7 @@ The last entry above with the `HttpServerListening` signals the database is open
 **Example** (result truncated for legibility):
 
 ```
-% curl -v http://localhost:9003/69206375/6f99b5f3deaeae8dc43fce3db2f3cd36ad8ed174ca3400b5b1bed76fdf248912/header
+% curl -v http://localhost:9003/blocks/69206375/6f99b5f3deaeae8dc43fce3db2f3cd36ad8ed174ca3400b5b1bed76fdf248912/header
 828a1a0028375b1a0420016758209694aa14a063868d37c5601b7b...
 ```
 
@@ -78,6 +78,6 @@ The last entry above with the `HttpServerListening` signals the database is open
 **Example** (result is truncated for legibility, and the block is empty):
 
 ```
-% curl -v http://localhost:9003/69206375/6f99b5f3deaeae8dc43fce3db2f3cd36ad8ed174ca3400b5b1bed76fdf248912
+% curl -v http://localhost:9003/blocks/69206375/6f99b5f3deaeae8dc43fce3db2f3cd36ad8ed174ca3400b5b1bed76fdf248912
 820685828a0c19012...8080a080
 ```
