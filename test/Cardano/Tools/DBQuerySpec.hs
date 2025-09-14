@@ -29,6 +29,10 @@ spec = do
       runDBQuery db "get-header 295.eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7"
         `shouldReturn` Found (either error id $ LHex.decode testHeaderHex)
 
+    it "allow listing all points from the DB" $ \db -> do
+      Found json <- runDBQuery db "list-blocks"
+      length <$> decode @[StandardPoint] json `shouldBe` Just 3000
+
     it "allow querying header's parent by point" $ \db -> do
       Found bytes <- runDBQuery db "get-parent 295.eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7"
       let parentHash = hashToBytesAsHex $ hashWith @Blake2b_256 id $ LBS.toStrict bytes

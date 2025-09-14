@@ -14,14 +14,13 @@
 
 module Cardano.Tools.DBServer where
 
-import Cardano.Tools.DB (Result (..), StandardBlock, getBlock, getHeader, getParent, getSnapshot, getSnapshots, makePoint, makeSlot, withDB)
+import Cardano.Tools.DB (DBError (..), Result (..), StandardBlock, getBlock, getHeader, getParent, getSnapshot, listSnapshots, makePoint, makeSlot, toBytestring, withDB)
 import Control.Monad (forever)
 import Control.Tracer (Tracer (..), contramap, traceWith)
 import Data.Aeson (FromJSON (..), ToJSON, Value (..), encode, object, toJSON, (.=))
 import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16.Lazy as LHex
-import qualified Data.ByteString.Base64.Lazy as Base64
 import qualified Data.ByteString.Lazy as LBS
 import Data.Function ((&))
 import Data.String (fromString)
@@ -77,7 +76,7 @@ webApp db req send =
     responseNotFound = responseLBS status404 [] ""
 
     handleGetSnapshots =
-      getSnapshots db >>= \snapshotsPoints ->
+      listSnapshots db >>= \snapshotsPoints ->
         send $
           responseLBS
             status200
@@ -90,8 +89,8 @@ webApp db req send =
           send $ responseLBS status400 [] "Malformed hash or slot"
         Just point ->
           getHeader db point >>= \case
-            Malformed -> send $ responseLBS status400 [] "Malformed point"
-            NotFound -> send responseNotFound
+            Err NotFound -> send responseNotFound
+            Err err -> send $ responseLBS status400 [] ("Bad query: " <> toBytestring err)
             Found header -> send $ responseLBS status200 [("content-type", "application/text")] (LHex.encode header)
 
     handleGetSnapshot slot =
@@ -99,8 +98,8 @@ webApp db req send =
         Nothing -> send $ responseLBS status400 [] "Malformed slot"
         Just slot' ->
           getSnapshot db slot' >>= \case
-            Malformed -> send $ responseLBS status400 [] "Malformed slot"
-            NotFound -> send responseNotFound
+            Err NotFound -> send responseNotFound
+            Err err -> send $ responseLBS status400 [] ("Bad query: " <> toBytestring err)
             Found snapshot ->
               send $
                 responseLBS
@@ -114,8 +113,8 @@ webApp db req send =
           send $ responseLBS status400 [] "Malformed hash or slot"
         Just point ->
           getParent db point >>= \case
-            NotFound -> send responseNotFound
-            Malformed -> send $ responseLBS status400 [] "Malformed hash or slot"
+            Err NotFound -> send responseNotFound
+            Err err -> send $ responseLBS status400 [] ("Bad query: " <> toBytestring err)
             Found parent -> send $ responseLBS status200 [("content-type", "application/json")] (LHex.encode parent)
 
     handleGetBlock slot hash = do
@@ -124,8 +123,8 @@ webApp db req send =
           send $ responseLBS status400 [] "Malformed hash or slot"
         Just point ->
           getBlock db point >>= \case
-            NotFound -> send responseNotFound
-            Malformed -> send $ responseLBS status400 [] "Malformed hash or slot"
+            Err NotFound -> send responseNotFound
+            Err err -> send $ responseLBS status400 [] ("Bad query: " <> toBytestring err)
             Found parent -> send $ responseLBS status200 [("content-type", "application/json")] (LHex.encode parent)
 
 -- * Tracing

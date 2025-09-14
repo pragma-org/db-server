@@ -16,6 +16,7 @@ where
 
 import Cardano.Tools.DB
   ( DB,
+    DBError (..),
     Result (..),
     SlotNo,
     StandardBlock,
@@ -24,7 +25,8 @@ import Cardano.Tools.DB
     getHeader,
     getParent,
     getSnapshot,
-    getSnapshots,
+    listBlocks,
+    listSnapshots,
     makeSlot,
     parsePoint,
     withDB,
@@ -56,27 +58,28 @@ data Query
   | GetParent StandardPoint
   | GetSnapshot SlotNo
   | ListSnapshots
+  | ListBlocks
   deriving (Eq, Show)
 
 runQuery :: Tracer IO DBQueryLog -> FilePath -> FilePath -> Text -> IO ()
 runQuery tracer configurationFile databaseDirectory query =
   withDB configurationFile databaseDirectory (contramap DBLog tracer) $ \db ->
     runDBQuery db query >>= \case
-      NotFound -> putStrLn $ "Not found"
-      Malformed -> putStrLn $ "Malformed"
+      Err err -> print err
       Found result -> LBS.putStr result
 
 runDBQuery :: DB -> Text -> IO (Result LBS.ByteString)
 runDBQuery db query = do
   case parseQuery query of
-    Left err -> pure $ Malformed
+    Left _err -> pure $ Err (MalformedQuery query)
     Right q ->
       case q of
         GetBlock point -> getBlock db point
         GetHeader point -> getHeader db point
         GetParent point -> getParent db point
         GetSnapshot slot -> getSnapshot db slot
-        ListSnapshots -> Found . Aeson.encode <$> getSnapshots db
+        ListSnapshots -> Found . Aeson.encode <$> listSnapshots db
+        ListBlocks -> Found . Aeson.encode <$> listBlocks db
 
 parseQuery :: Text -> Either Error Query
 parseQuery str =
@@ -87,6 +90,7 @@ parseQuery str =
     ["get-parent", point] -> withPoint GetParent point
     ["get-snapshot", slot] -> withSlot GetSnapshot slot
     ["list-snapshots"] -> Right ListSnapshots
+    ["list-blocks"] -> Right ListBlocks
     _ -> Left $ ParseError "Invalid query"
   where
     withPoint q point =

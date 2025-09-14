@@ -1,4 +1,5 @@
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
@@ -14,6 +15,7 @@ module Cardano.Tools.DB
     StandardPoint,
     pattern StandardPoint,
     Result (..),
+    DBError (..),
     DB,
     DBTrace,
     SlotNo,
@@ -24,11 +26,13 @@ module Cardano.Tools.DB
     getParent,
     getBlock,
     getSnapshot,
-    getSnapshots,
+    listSnapshots,
     parsePoint,
     makePoint,
     makeSlot,
     mkPoint,
+    listBlocks,
+    toBytestring,
   )
 where
 
@@ -42,6 +46,7 @@ import Control.Tracer (Tracer (..))
 import Data.Aeson (FromJSON (..), ToJSON, object, toJSON, withObject, (.:), (.=))
 import qualified Data.ByteString.Base16 as Hex
 import qualified Data.ByteString.Lazy as LBS
+import Data.String (IsString (fromString))
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
@@ -59,7 +64,7 @@ import qualified Ouroboros.Consensus.Node.InitStorage as Node
 import Ouroboros.Consensus.Node.ProtocolInfo (ProtocolInfo (..))
 import Ouroboros.Consensus.Shelley.Ledger (LedgerState (shelleyLedgerState), ShelleyTip (..), shelleyLedgerTip)
 import Ouroboros.Consensus.Shelley.Protocol.Abstract (ShelleyHash (..))
-import Ouroboros.Consensus.Storage.ChainDB (BlockComponent (..), ChainDB, TraceEvent, defaultArgs, getBlockComponent)
+import Ouroboros.Consensus.Storage.ChainDB (BlockComponent (..), ChainDB, IteratorResult (..), TraceEvent, defaultArgs, getBlockComponent, streamAll)
 import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
 import Ouroboros.Consensus.Storage.ChainDB.Impl.Args (completeChainDbArgs, updateTracer)
 import Ouroboros.Consensus.Storage.LedgerDB (Checkpoint (unCheckpoint), LedgerDB (..))
@@ -149,26 +154,37 @@ makePoint slotTxt hashTxt =
         Right bytes -> Just $ RealPoint slot (fromRawHash (Proxy @StandardBlock) bytes)
         Left _ -> Nothing
 
-data Result a = Malformed | NotFound | Found a
+data DBError
+  = NotFound
+  | Malformed
+  | MalformedQuery Text
+  | InitialHeader
+  | UnknownStateType
+  deriving stock (Eq, Show)
+
+toBytestring :: (IsString s) => DBError -> s
+toBytestring = fromString . show
+
+data Result a = Err DBError | Found a
   deriving stock (Eq, Show)
 
 getHeader :: ChainDB IO StandardBlock -> StandardPoint -> IO (Result LBS.ByteString)
 getHeader db point =
-  maybe NotFound Found <$> getBlockComponent db GetRawHeader point
+  maybe (Err NotFound) Found <$> getBlockComponent db GetRawHeader point
 
 getParent :: ChainDB IO StandardBlock -> StandardPoint -> IO (Result LBS.ByteString)
 getParent db point =
   getBlockComponent db GetHeader point >>= \case
-    Nothing -> pure NotFound
+    Nothing -> pure (Err NotFound)
     Just header ->
       case headerPrevHash header of
         BlockHash headerHash ->
           getHeader db (RealPoint (SlotNo 0) headerHash) -- FIXME
-        GenesisHash -> pure Malformed
+        GenesisHash -> pure (Err InitialHeader)
 
 getBlock :: ChainDB IO StandardBlock -> StandardPoint -> IO (Result LBS.ByteString)
 getBlock db point =
-  maybe NotFound Found <$> getBlockComponent db GetRawBlock point
+  maybe (Err NotFound) Found <$> getBlockComponent db GetRawBlock point
 
 pointOfState :: LedgerState StandardBlock -> StandardPoint
 pointOfState = \case
@@ -193,11 +209,23 @@ pointOfState = \case
 makeSlot :: Text -> Maybe SlotNo
 makeSlot slotTxt = fromInteger <$> readMaybe (Text.unpack slotTxt)
 
-getSnapshots :: ChainDB IO StandardBlock -> IO [StandardPoint]
-getSnapshots db = do
+listSnapshots :: ChainDB IO StandardBlock -> IO [StandardPoint]
+listSnapshots db = do
   LedgerDB {ledgerDbCheckpoints} <- atomically $ ChainDB.getLedgerDB db
   let snapshotsList :: [LedgerState StandardBlock] = ledgerState . unCheckpoint <$> Seq.toOldestFirst ledgerDbCheckpoints
   pure $ pointOfState <$> snapshotsList
+
+listBlocks :: ChainDB IO StandardBlock -> IO [StandardPoint]
+listBlocks db = do
+  withRegistry $ \registry ->
+    streamAll db registry GetHeader >>= go []
+  where
+    go acc iter = do
+      ChainDB.iteratorNext iter >>= \case
+        IteratorResult hdr -> go (headerRealPoint hdr : acc) iter
+        IteratorExhausted -> pure acc
+        IteratorBlockGCed _ ->
+          error "block on the current chain was garbage-collected"
 
 getSnapshot :: ChainDB IO StandardBlock -> SlotNo -> IO (Result LBS.ByteString)
 getSnapshot db slot = do
@@ -207,5 +235,5 @@ getSnapshot db slot = do
       case ledgerState $ unCheckpoint snapshot of
         LedgerStateBabbage state ->
           pure $ Found $ serialize (toEnum 10) $ shelleyLedgerState state
-        _other -> pure NotFound
-    _other -> pure NotFound
+        _other -> pure (Err UnknownStateType)
+    _other -> pure (Err NotFound)
