@@ -51,7 +51,7 @@ runShake pwd uid = shakeArgs options $ do
           "."
           [ "src//*.hs"
           , "test//*.hs"
-          , "data//*.*"
+          , "test-data//*.*"
           , "app//*.hs"
           ]
         need ["db-server.cabal", "cabal.project"]

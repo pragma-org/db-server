@@ -1,6 +1,6 @@
 # db-server
 
-A ReST-ish server to expose Cardano-node's DB.
+A ReST-ish server and CLI tool to expose Cardano-node's DB.
 
 ![CI Build](https://github.com/pragma-org/db-server/actions/workflows/haskell.yml/badge.svg?branch=main)
 
@@ -13,9 +13,10 @@ A ReST-ish server to expose Cardano-node's DB.
 
 ### Building
 
+`db-server` affords using  [Shake](https://shakebuild.com) as a driver to build itself. This has the advantage of taking care of building and installing cardano-node's native dependencies.
+
 ```
-cabal update
-cabal build all
+./build.hs
 ```
 
 ### Testing
