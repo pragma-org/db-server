@@ -90,6 +90,7 @@ webApp db req send =
           send $ responseLBS status400 [] "Malformed hash or slot"
         Just point ->
           getHeader db point >>= \case
+            Malformed -> send $ responseLBS status400 [] "Malformed point"
             NotFound -> send responseNotFound
             Found header -> send $ responseLBS status200 [("content-type", "application/text")] (LHex.encode header)
 
@@ -98,13 +99,14 @@ webApp db req send =
         Nothing -> send $ responseLBS status400 [] "Malformed slot"
         Just slot' ->
           getSnapshot db slot' >>= \case
+            Malformed -> send $ responseLBS status400 [] "Malformed slot"
             NotFound -> send responseNotFound
             Found snapshot ->
               send $
                 responseLBS
                   status200
                   [("content-type", "application/json")]
-                  (Base64.encode snapshot)
+                  (LHex.encode snapshot)
 
     handleGetParent slot hash =
       case makePoint slot hash of

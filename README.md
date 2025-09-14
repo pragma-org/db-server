@@ -4,7 +4,7 @@ A ReST-ish server and CLI tool to expose Cardano-node's DB.
 
 ![CI Build](https://github.com/pragma-org/db-server/actions/workflows/haskell.yml/badge.svg?branch=main)
 
-## Build
+# Build
 
 ### Prerequisites
 
@@ -25,7 +25,11 @@ A ReST-ish server and CLI tool to expose Cardano-node's DB.
 cabal test
 ```
 
-## Usage
+# Usage
+
+`db-server` can be used in two modes: as an HTTP server exposing some endpoints over an existing cardano-node DB, or as command-line query tool.
+
+## Server mode
 
 ### Starting the server
 
@@ -68,6 +72,20 @@ The last entry above with the `HttpServerListening` signals the database is open
 828a1a0028375b1a0420016758209694aa14a063868d37c5601b7b...
 ```
 
+#### Retrieve parent's header
+
+* `GET /blocks/:slot/:hash/parent`: Retrieves raw hex-encoded bytes of the block header which is the parent of the header at given `:slot` and with given `:hash` (aka. _point_)
+  * `200` : Returns the raw hex-encoded bytes for header
+  * `400` : Wrongly formatted `:slot` or `:hash` paths
+  * `404` : No block exists at given point
+
+**Example** (result truncated for legibility):
+
+```
+% curl -v http://localhost:9003/blocks/69206375/6f99b5f3deaeae8dc43fce3db2f3cd36ad8ed174ca3400b5b1bed76fdf248912/parent
+828a1a0028375b1a0420016758209694aa14a063868d37c5601b7b...
+```
+
 #### Retrieve block bytes
 
 * `GET /blocks/:slot/:hash`: Retrieves raw hex-encoded CBOR bytes of a block at given `:slot` and with given `:hash` (aka. _point_)
@@ -80,4 +98,45 @@ The last entry above with the `HttpServerListening` signals the database is open
 ```
 % curl -v http://localhost:9003/blocks/69206375/6f99b5f3deaeae8dc43fce3db2f3cd36ad8ed174ca3400b5b1bed76fdf248912
 820685828a0c19012...8080a080
+```
+
+#### List snapshots
+
+* `GET /snapshots`: List all the points for which this db-server has a ledger state snapshot
+  * `200` : Returns JSON-encoded list of points
+
+**Example** (result is truncated for legibility, and the block is empty):
+
+```
+% curl -v http://localhost:9003/snapshots | jq .
+...
+  {
+    "hash": "82499f71f6ab9dda3f84023897ca1e3cb3fe5c19b7018be2e55df57b191713a0",
+    "slot": 59735
+  },
+  {
+    "hash": "574a6ed18ccca232028a4b2632abdb7b99ef28adf25e58ee7392574fe69a4c74",
+    "slot": 59737
+  },
+  {
+    "hash": "578cbb520f441b7d1530dac16844302c3e5e9ba4c434b439359c89c62a08cd69",
+    "slot": 59747
+  }
+]
+```
+
+#### Retrieve snasphot
+
+* `GET /snapshots/:slot`: Retrieve raw hex-encoded CBOR bytes of ledger state at given `:slot`, if it exists
+  * `200` : Returns hex-encoded bytes for the snapshot serialised as CBOR
+  * `400` : Wrongly formatted `:slot`
+  * `404` : No snapshot exists at given slot
+
+
+**Example** (result is truncated for legibility, and the block is empty):
+
+```
+% curl -v http://localhost:9003/snapshots/59737
+...
+76ba082c604e6af7c482f716934ed08d19c227331b00071a1474e7f000f6
 ```
