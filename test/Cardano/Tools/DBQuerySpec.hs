@@ -1,17 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Cardano.Tools.DBQuerySpec where
 
-import Cardano.Tools.DB ( DB, mkPoint, Result(..) )
+import Cardano.Crypto.Hash (Blake2b_256, hashToBytesAsHex, hashWith)
+import Cardano.Tools.DB (DB, Result (..), mkPoint)
 import Cardano.Tools.DBQuery (DBQueryLog (..), Query (..), parseQuery, runDBQuery)
 import Cardano.Tools.DBServer (withLog)
-import Cardano.Tools.TestHelper (withLogFile, withTempDir, withTestDB, testHeaderHex)
+import Cardano.Tools.TestHelper (testBlockHex, testHeaderHex, withLogFile, withTempDir, withTestDB, testParentHash)
 import Control.Tracer (contramap)
-import System.FilePath ((</>))
-import Test.Hspec (Spec, around, describe, it, shouldBe, shouldReturn)
-import qualified Data.Text.Lazy as LT
-import qualified Data.Text.Lazy.Encoding as LT
 import qualified Data.ByteString.Base16.Lazy as LHex
+import qualified Data.ByteString.Lazy as LBS
+import System.FilePath ((</>))
+import Test.Hspec (Spec, describe, it, shouldBe, shouldReturn, aroundAll)
 
 spec :: Spec
 spec = do
@@ -22,10 +23,19 @@ spec = do
 
   -- NOTE: Opening the ChainDB takes some time, so we do it only once for all tests
   -- This is fine as long as we don't write to the database
-  around mkDB $ do
+  aroundAll mkDB $ do
     it "allow querying header by point" $ \db ->
       runDBQuery db "get-header 295.eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7"
-        `shouldReturn` Found (either error id $ LHex.decode $ LT.encodeUtf8 $ LT.pack testHeaderHex)
+        `shouldReturn` Found (either error id $ LHex.decode testHeaderHex)
+
+    it "allow querying header's parent by point" $ \db -> do
+      Found bytes <- runDBQuery db "get-parent 295.eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7"
+      let parentHash = hashToBytesAsHex $ hashWith @Blake2b_256 id $ LBS.toStrict bytes
+      parentHash `shouldBe` testParentHash
+
+    it "allow querying block by point" $ \db ->
+      runDBQuery db "get-block 295.eeff5bd1eeea7fc2ccfc5e8e8b858e35b101eebc3cbe70b80c43502cb1c6e3c7"
+        `shouldReturn` Found (either error id $ LHex.decode testBlockHex)
 
 mkDB :: (DB -> IO r) -> IO r
 mkDB k =

@@ -112,6 +112,8 @@ test-suite db-server-test
                 aeson,
                 base,
                 base16-bytestring >=1.0,
+                bytestring,
+                cardano-crypto-class,
                 contra-tracer,
                 db-server,
                 directory,
