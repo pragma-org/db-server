@@ -74,58 +74,36 @@ webApp db req send =
     _ -> send responseNotFound
   where
     responseNotFound = responseLBS status404 [] ""
+    responseBadRequest msg = responseLBS status400 [] msg
+    responseOk content = responseLBS status200 [("content-type", "application/json")] content
 
     handleGetSnapshots =
       listSnapshots db >>= \snapshotsPoints ->
-        send $
-          responseLBS
-            status200
-            [("content-type", "application/json")]
-            (encode snapshotsPoints)
+        send $ responseOk (encode snapshotsPoints)
 
-    handleGetHeader slot hash =
+    handleWithPoint action slot hash =
       case makePoint slot hash of
-        Nothing ->
-          send $ responseLBS status400 [] "Malformed hash or slot"
+        Nothing -> send $ responseBadRequest "Malformed hash or slot"
         Just point ->
-          getHeader db point >>= \case
+          action db point >>= \case
             Err NotFound -> send responseNotFound
-            Err err -> send $ responseLBS status400 [] ("Bad query: " <> toBytestring err)
-            Found header -> send $ responseLBS status200 [("content-type", "application/text")] (LHex.encode header)
+            Err err -> send $ responseBadRequest ("Bad query: " <> toBytestring err)
+            Found result -> send $ responseOk (LHex.encode result)
+
+    handleGetHeader slot hash = handleWithPoint getHeader slot hash
 
     handleGetSnapshot slot =
       case makeSlot slot of
-        Nothing -> send $ responseLBS status400 [] "Malformed slot"
+        Nothing -> send $ responseBadRequest "Malformed slot"
         Just slot' ->
           getSnapshot db slot' >>= \case
             Err NotFound -> send responseNotFound
-            Err err -> send $ responseLBS status400 [] ("Bad query: " <> toBytestring err)
-            Found snapshot ->
-              send $
-                responseLBS
-                  status200
-                  [("content-type", "application/json")]
-                  (LHex.encode snapshot)
+            Err err -> send $ responseBadRequest ("Bad query: " <> toBytestring err)
+            Found snapshot -> send $ responseOk (LHex.encode snapshot)
 
-    handleGetParent slot hash =
-      case makePoint slot hash of
-        Nothing ->
-          send $ responseLBS status400 [] "Malformed hash or slot"
-        Just point ->
-          getParent db point >>= \case
-            Err NotFound -> send responseNotFound
-            Err err -> send $ responseLBS status400 [] ("Bad query: " <> toBytestring err)
-            Found parent -> send $ responseLBS status200 [("content-type", "application/json")] (LHex.encode parent)
+    handleGetParent slot hash = handleWithPoint getParent slot hash
 
-    handleGetBlock slot hash = do
-      case makePoint slot hash of
-        Nothing ->
-          send $ responseLBS status400 [] "Malformed hash or slot"
-        Just point ->
-          getBlock db point >>= \case
-            Err NotFound -> send responseNotFound
-            Err err -> send $ responseLBS status400 [] ("Bad query: " <> toBytestring err)
-            Found parent -> send $ responseLBS status200 [("content-type", "application/json")] (LHex.encode parent)
+    handleGetBlock slot hash = handleWithPoint getBlock slot hash
 
 -- * Tracing
 

@@ -50,7 +50,12 @@ instance ToJSON DBQueryLog where
 data Error
   = ParseError Text
   | QueryError Text
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic)
+
+instance ToJSON Error where
+  toJSON = \case
+    ParseError msg -> object ["tag" .= ("ParseError" :: Text), "message" .= msg]
+    QueryError msg -> object ["tag" .= ("QueryError" :: Text), "message" .= msg]
 
 data Query
   = GetBlock StandardPoint
@@ -65,13 +70,13 @@ runQuery :: Tracer IO DBQueryLog -> FilePath -> FilePath -> Text -> IO ()
 runQuery tracer configurationFile databaseDirectory query =
   withDB configurationFile databaseDirectory (contramap DBLog tracer) $ \db ->
     runDBQuery db query >>= \case
-      Err err -> print err
+      Err err -> LBS.putStr $ Aeson.encode err
       Found result -> LBS.putStr result
 
 runDBQuery :: DB -> Text -> IO (Result LBS.ByteString)
 runDBQuery db query = do
   case parseQuery query of
-    Left _err -> pure $ Err (MalformedQuery query)
+    Left err -> pure $ Err (MalformedQuery query)
     Right q ->
       case q of
         GetBlock point -> getBlock db point
@@ -96,4 +101,4 @@ parseQuery str =
     withPoint q point =
       maybe (Left $ ParseError $ "error parsing point: " <> point) (Right . q) $ parsePoint point
     withSlot q slot =
-      maybe (Left $ ParseError $ "error parsing point: " <> slot) (Right . q) $ makeSlot slot
+      maybe (Left $ ParseError $ "error parsing slot: " <> slot) (Right . q) $ makeSlot slot
