@@ -61,7 +61,7 @@ run tracer (fromIntegral -> port) host configurationFile databaseDirectory = do
         & Warp.setServerName "db-server"
         & Warp.setTimeout 120
         & Warp.setMaximumBodyFlush Nothing
-        & Warp.setBeforeMainLoop (traceWith tr HttpServerListening {host, port})
+        & Warp.setBeforeMainLoop (traceWith tr (HttpListenLog (ListenEvent {host, port})))
 
 webApp :: ChainDB IO StandardBlock -> Application
 webApp db req send =
@@ -74,8 +74,8 @@ webApp db req send =
     _ -> send responseNotFound
   where
     responseNotFound = responseLBS status404 [] ""
-    responseBadRequest msg = responseLBS status400 [] msg
-    responseOk content = responseLBS status200 [("content-type", "application/json")] content
+    responseBadRequest = responseLBS status400 []
+    responseOk = responseLBS status200 [("content-type", "application/json")]
 
     handleGetSnapshots =
       listSnapshots db >>= \snapshotsPoints ->
@@ -90,7 +90,7 @@ webApp db req send =
             Err err -> send $ responseBadRequest ("Bad query: " <> toBytestring err)
             Found result -> send $ responseOk (LHex.encode result)
 
-    handleGetHeader slot hash = handleWithPoint getHeader slot hash
+    handleGetHeader = handleWithPoint getHeader
 
     handleGetSnapshot slot =
       case makeSlot slot of
@@ -101,9 +101,9 @@ webApp db req send =
             Err err -> send $ responseBadRequest ("Bad query: " <> toBytestring err)
             Found snapshot -> send $ responseOk (LHex.encode snapshot)
 
-    handleGetParent slot hash = handleWithPoint getParent slot hash
+    handleGetParent = handleWithPoint getParent
 
-    handleGetBlock slot hash = handleWithPoint getBlock slot hash
+    handleGetBlock = handleWithPoint getBlock
 
 -- * Tracing
 
@@ -131,12 +131,12 @@ withLog hdl k = do
 tracerMiddleware :: Tracer IO HttpServerLog -> Middleware
 tracerMiddleware tr runApp req send = do
   start <- GHC.Clock.getMonotonicTimeNSec
-  traceWith tr HttpRequest {path, method}
+  traceWith tr (HttpRequestLog (RequestEvent {path, method}))
   runApp req $ \res -> do
     result <- send res
     end <- GHC.Clock.getMonotonicTimeNSec
     let time = mkRequestTime start end
-    traceWith tr HttpResponse {status = mkStatus (responseStatus res), time}
+    traceWith tr (HttpResponseLog (ResponseEvent {status = mkStatus (responseStatus res), time}))
     pure result
   where
     method = decodeUtf8 (requestMethod req)
@@ -161,9 +161,20 @@ data HttpStatus = HttpStatus {code :: Int, message :: Text}
   deriving stock (Eq, Generic, Show)
   deriving anyclass (ToJSON, FromJSON)
 
-data HttpServerLog
-  = HttpServerListening {host :: String, port :: Int}
-  | HttpRequest {path :: [Text], method :: Text}
-  | HttpResponse {status :: HttpStatus, time :: RequestTime}
+data HttpServerLog =
+  HttpListenLog ListenEvent
+  | HttpRequestLog RequestEvent
+  | HttpResponseLog ResponseEvent
   deriving stock (Eq, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
+
+data ListenEvent = ListenEvent {host :: String, port :: Int}
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+data RequestEvent = RequestEvent {path :: [Text], method :: Text}
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+data ResponseEvent = ResponseEvent {status :: HttpStatus, time :: RequestTime}
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
+

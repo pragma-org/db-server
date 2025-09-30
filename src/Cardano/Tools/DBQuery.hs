@@ -2,7 +2,6 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ViewPatterns #-}
 
 module Cardano.Tools.DBQuery
   ( DBQueryLog (..),
@@ -40,7 +39,7 @@ import qualified Data.Text as Text
 import GHC.Generics (Generic)
 import Ouroboros.Consensus.Storage.ChainDB (TraceEvent)
 
-data DBQueryLog = DBLog (TraceEvent StandardBlock)
+newtype DBQueryLog = DBLog (TraceEvent StandardBlock)
   deriving stock (Eq, Show, Generic)
 
 instance ToJSON DBQueryLog where
@@ -76,7 +75,7 @@ runQuery tracer configurationFile databaseDirectory query =
 runDBQuery :: DB -> Text -> IO (Result LBS.ByteString)
 runDBQuery db query = do
   case parseQuery query of
-    Left err -> pure $ Err (MalformedQuery query)
+    Left _ -> pure $ Err (MalformedQuery query)
     Right q ->
       case q of
         GetBlock point -> getBlock db point

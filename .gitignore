@@ -25,6 +25,14 @@ dist/
 **/tags
 **/TAGS
 
+# Shake
+
+report.html
+bin
+blst
+libsodium
+secp256k1
+
 # nix
 result
 result-[0-9]*
