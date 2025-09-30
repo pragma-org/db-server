@@ -4,6 +4,33 @@ A ReST-ish server and CLI tool to expose Cardano-node's DB.
 
 ![CI Build](https://github.com/pragma-org/db-server/actions/workflows/haskell.yml/badge.svg?branch=main)
 
+# Roadmap
+
+The goal is to produce arbitrary Amaru snapshots, from a cardano-node database.
+
+E.g.
+
+```
+db-server amaru --db db --config config.json 531 532 533
+```
+
+would produce, in current directory, 531.snapshot, 532.snapshot and 533.snapshot, which can be used to start an Amaru node.
+
+Current status:
+
+- we read a chain-db in non UTxO-hd mode and we can serve (over HTTP or query) blocks, headers, and in-memory snapshots.
+
+Next steps:
+
+- read a UTxO-hd chain-db (update dependencies - and test)
+- generate cardano-node ledger snapshot for arbitrary slot
+  * copy/adapt from [db-synthesizer](https://github.com/abailly/ouroboros-consensus/blob/abailly/snapshot-generator/ouroboros-consensus-cardano/src/unstable-cardano-tools/Cardano/Tools/DBSynthesizer/Forging.hs#L113)
+- make these snapshots **complete** for Amaru (add UTxO tables)
+- in a single command, produce a complete set of data to bootstrap Amaru.
+  * data is suitable for use by Amaru bootstrap command
+  * might need Amaru modification to bootstrap.
+- demonstrate this works on a mithril snapshot.
+
 # Build
 
 ### Prerequisites
