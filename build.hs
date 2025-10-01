@@ -45,7 +45,7 @@ install = do
 
 runShake :: FilePath -> UID -> IO ()
 runShake pwd uid = shakeArgs options $ do
-  let defaultNodeVersion = "10.1.4"
+  let defaultNodeVersion = "10.5.1"
       needHaskellSources = do
         needDirectoryFiles
           "."
