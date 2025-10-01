@@ -1,4 +1,6 @@
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
@@ -51,6 +53,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Word (Word64)
+import GHC.Generics (Generic)
 import Ouroboros.Consensus.Block (ChainHash (..), ConvertRawHash (fromRawHash), Proxy (..), headerPrevHash, toRawHash)
 import Ouroboros.Consensus.Block.Abstract (HeaderHash)
 import Ouroboros.Consensus.Block.RealPoint
@@ -160,7 +163,8 @@ data DBError
   | MalformedQuery Text
   | InitialHeader
   | UnknownStateType
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 toBytestring :: (IsString s) => DBError -> s
 toBytestring = fromString . show
