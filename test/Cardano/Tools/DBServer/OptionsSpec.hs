@@ -30,7 +30,7 @@ spec = do
         queryBatchSize = 100000,
         snapshotInterval = 4320
       }
-      parseLedgerDbConfig "test-data/config/mainnet-config-bp.json" `shouldReturn` Right ledgerDbConfig
+      parseLedgerDbConfig "test-data/10.5.1/configs/config.json" `shouldReturn` Right ledgerDbConfig
 
 
 newtype SomeHost = SomeHost String
