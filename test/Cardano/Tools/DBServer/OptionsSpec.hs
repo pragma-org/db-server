@@ -1,9 +1,11 @@
 module Cardano.Tools.DBServer.OptionsSpec where
 
+import Cardano.Tools.DB
+    ( LedgerDbConfig(..), LedgerDbBackend(..), parseLedgerDbConfig )
 import Cardano.Tools.DBServer.Options (Options (..), ServeOptions (..), parseArgs)
 import Data.String (IsString (..))
 import Network.Wai.Handler.Warp (HostPreference)
-import Test.Hspec (Spec, describe, it, shouldBe)
+import Test.Hspec (Spec, describe, it, shouldBe, shouldReturn)
 import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck (Arbitrary (..), elements, (===))
 
@@ -19,6 +21,17 @@ spec = do
       show (fromString "!4" :: HostPreference) `shouldBe` "HostIPv4Only"
       show (fromString "*" :: HostPreference) `shouldBe` "HostAny"
       show (fromString "0.0.0.0" :: HostPreference) `shouldBe` "Host \"0.0.0.0\""
+
+  describe "Config files" $ do
+    it "Can read configuration file" $ do
+      let ledgerDbConfig =  LedgerDbConfig {
+        backend = V2InMemory,
+        numOfDiskSnapshots = 2,
+        queryBatchSize = 100000,
+        snapshotInterval = 4320
+      }
+      parseLedgerDbConfig "test-data/config/mainnet-config-bp.json" `shouldReturn` Right ledgerDbConfig
+
 
 newtype SomeHost = SomeHost String
   deriving (Show, Eq)

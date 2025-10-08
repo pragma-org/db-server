@@ -12,6 +12,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
+
 module Cardano.Tools.DB
   ( StandardBlock,
     StandardPoint,
@@ -20,6 +21,8 @@ module Cardano.Tools.DB
     DBError (..),
     DB,
     DBTrace,
+    LedgerDbBackend(..),
+    LedgerDbConfig(..),
     SlotNo,
     Hash,
     asInteger,
@@ -34,6 +37,7 @@ module Cardano.Tools.DB
     makeSlot,
     mkPoint,
     listBlocks,
+    parseLedgerDbConfig,
     toBytestring,
   )
 where
@@ -45,7 +49,7 @@ import Cardano.Slotting.Slot (SlotNo (..), WithOrigin (..))
 import Cardano.Tools.DBAnalyser.Block.Cardano (Args (CardanoBlockArgs))
 import Cardano.Tools.DBAnalyser.HasAnalysis (mkProtocolInfo)
 import Control.Tracer (Tracer (..))
-import Data.Aeson (FromJSON (..), ToJSON, object, toJSON, withObject, (.:), (.=))
+import Data.Aeson (FromJSON (..), ToJSON, object, toJSON, withObject, (.:), (.=), eitherDecodeFileStrict', Value (Object))
 import qualified Data.ByteString.Base16 as Hex
 import qualified Data.ByteString.Lazy as LBS
 import Data.String (IsString (fromString))
@@ -76,6 +80,9 @@ import Ouroboros.Consensus.Util.ResourceRegistry (withRegistry)
 import Ouroboros.Network.AnchoredSeq (lookupByMeasure)
 import qualified Ouroboros.Network.AnchoredSeq as Seq
 import Text.Read (readMaybe)
+import qualified Data.Aeson.Types as Aeson
+import qualified Data.Aeson.KeyMap as KeyMap
+import Data.Aeson.Types (fromJSON)
 
 type StandardBlock = CardanoBlock StandardCrypto
 
@@ -241,3 +248,53 @@ getSnapshot db slot = do
           pure $ Found $ serialize (toEnum 10) $ shelleyLedgerState state
         _other -> pure (Err UnknownStateType)
     _other -> pure (Err NotFound)
+
+
+-- # LedgerDb Configuration
+-- We need to read the node's config file to get its LedgerDB options
+-- There is no way to parse the node config without pulling in cardano-node code and dependencies,
+-- which defeats the purpose of this code.
+
+data LedgerDbConfig = LedgerDbConfig
+  { backend :: LedgerDbBackend,
+    numOfDiskSnapshots :: Int,
+    queryBatchSize :: Int,
+    snapshotInterval :: Int
+  }
+  deriving (Eq, Show)
+
+data LedgerDbBackend = V2InMemory
+  deriving (Eq, Show)
+
+newtype LedgerDbConfigError = LedgerDbConfigError String
+  deriving (Eq, Show)
+
+instance FromJSON LedgerDbConfig where
+  parseJSON = withObject "LedgerDbConfig" $ \v ->
+    LedgerDbConfig
+      <$> v .: "Backend"
+      <*> v .: "NumOfDiskSnapshots"
+      <*> v .: "QueryBatchSize"
+      <*> v .: "SnapshotInterval"
+
+instance FromJSON LedgerDbBackend where
+  parseJSON "V2InMemory" = pure V2InMemory
+  parseJSON _ = fail "Unsupported LedgerDbBackend"
+
+parseLedgerDbConfig :: FilePath -> IO (Either LedgerDbConfigError LedgerDbConfig)
+parseLedgerDbConfig nodeConfig = do
+  eitherDecodeFileStrict' nodeConfig >>= \case
+    Left _ ->
+      undefined
+    Right (Object config) ->
+      case KeyMap.lookup "LedgerDB" config of
+        Nothing ->
+          undefined
+        Just value ->
+          case fromJSON value of
+            Aeson.Error err ->
+              fail err
+            Aeson.Success v ->
+              pure (Right v)
+    Right _ ->
+      undefined

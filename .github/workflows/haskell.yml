@@ -29,11 +29,7 @@ jobs:
       id: tag
       shell: bash
       run: |
-        if [ "${GITHUB_REF/refs\/tags\//}" == "refs/heads/main"  ]; then
-          echo "value=$GIT_SHA" >> $GITHUB_OUTPUT
-        else
-          echo "value=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
-        fi
+        echo "value=$GIT_SHA" >> $GITHUB_OUTPUT
       env:
         GIT_SHA: ${{ github.sha }}
 
@@ -56,10 +52,6 @@ jobs:
           ${{ runner.os }}-${{ runner.arch }}-build-${{ env.cache-name }}-
           ${{ runner.os }}-${{ runner.arch }}-build-
           ${{ runner.os }}-${{ runner.arch }}-
-
-    - name: ❓ Check cache
-      run: |
-        find ~/.local
 
     - name: 🚄 Prepare OS
       if: ${{ matrix.os == 'macos' }}
