@@ -1,0 +1,82 @@
+{
+  "activeSlotsCoeff": 0.05,
+  "epochLength": 432000,
+  "genDelegs": {
+    "a2dad54f429399ffd7d2d4a5c6a205b790e7e69143511807f08442e5": {
+      "delegate": "2c0da3b7b6a3670039e8a1e1c3704725dd0e7a049904a16033fc7db5",
+      "vrf": "ba5ed9705890ca53f2b0c35cf7cf457683d3c89b1499ba758de4a13a3cf190d2"
+    }
+  },
+  "initialFunds": {
+    "0064f2c2fb74a95d029d588991fc03b599a5750e9df8e446dbe791e38cc33237d238312b5f976f6a1c0dad7228e71de7ba97f1d5b3b7ab8602": 600000000000000,
+    "600a0ee370ebdc8a8eacab0b2de8c37f61364ca112b727e9fd3d8c6c58": 600000000000000
+  },
+  "maxKESEvolutions": 62,
+  "maxLovelaceSupply": 45000000000000000,
+  "networkId": "Testnet",
+  "networkMagic": 42,
+  "protocolParams": {
+    "a0": 0.3,
+    "decentralisationParam": 0,
+    "eMax": 18,
+    "extraEntropy": {
+      "tag": "NeutralNonce"
+    },
+    "keyDeposit": 2000000,
+    "maxBlockBodySize": 90112,
+    "maxBlockHeaderSize": 1100,
+    "maxTxSize": 16384,
+    "minFeeA": 44,
+    "minFeeB": 155381,
+    "minPoolCost": 340000000,
+    "minUTxOValue": 1000000,
+    "nOpt": 150,
+    "poolDeposit": 500000000,
+    "protocolVersion": {
+      "major": 10,
+      "minor": 0
+    },
+    "rho": 0.003,
+    "tau": 0.2
+  },
+  "securityParam": 2160,
+  "slotLength": 1,
+  "slotsPerKESPeriod": 129600,
+  "staking": {
+    "pools": {
+      "fd46b1c9c18431ced9a037832f3e58d7434b67d6ab268813542926c8": {
+        "cost": 340000000,
+        "margin": 0.0,
+        "metadata": null,
+        "owners": [],
+        "pledge": 0,
+        "publicKey": "fd46b1c9c18431ced9a037832f3e58d7434b67d6ab268813542926c8",
+        "relays": [
+          {
+            "single host name": {
+              "dnsName": "p1.testnet.local.net",
+              "port": 3001
+            }
+          },
+          {
+            "multi host name": {
+              "dnsName": "p1.testnet.local.net"
+            }
+          }
+        ],
+        "rewardAccount": {
+          "credential": {
+            "keyHash": "de52ec1705006d5414adf42ce20de685a2098bc00beca8874ed2dfa0"
+          },
+          "network": "Testnet"
+        },
+        "vrf": "791f97861b630ad17b0891032ae5184c64d9264461953e575048f590e7b414fa"
+      }
+    },
+    "stake": {
+      "c33237d238312b5f976f6a1c0dad7228e71de7ba97f1d5b3b7ab8602": "fd46b1c9c18431ced9a037832f3e58d7434b67d6ab268813542926c8"
+    }
+  },
+  "systemStart": "2025-10-07T08:50:22Z",
+  "updateQuorum": 1
+}

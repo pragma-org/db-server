@@ -73,7 +73,7 @@ import Ouroboros.Consensus.Shelley.Protocol.Abstract (ShelleyHash (..))
 import Ouroboros.Consensus.Storage.ChainDB (BlockComponent (..), ChainDB, IteratorResult (..), TraceEvent, defaultArgs, getBlockComponent, streamAll)
 import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
 import Ouroboros.Consensus.Storage.ChainDB.Impl.Args (completeChainDbArgs, updateTracer)
-import Ouroboros.Consensus.Storage.LedgerDB (LedgerDB (..))
+import Ouroboros.Consensus.Storage.LedgerDB (LedgerDB (..), LedgerDbFlavorArgs (LedgerDbFlavorArgsV2))
 import Ouroboros.Consensus.Util.IOLike (atomically)
 import Control.ResourceRegistry (withRegistry)
 import Ouroboros.Network.AnchoredSeq (lookupByMeasure)
@@ -82,6 +82,7 @@ import Text.Read (readMaybe)
 import qualified Data.Aeson.Types as Aeson
 import qualified Data.Aeson.KeyMap as KeyMap
 import Data.Aeson.Types (fromJSON)
+import qualified Ouroboros.Consensus.Storage.LedgerDB.V2.Args as V2
 
 type StandardBlock = CardanoBlock StandardCrypto
 
@@ -131,6 +132,10 @@ withDB ::
   IO a
 withDB configurationFile databaseDir tracer k = do
   let args = CardanoBlockArgs configurationFile Nothing
+  ldbArgs <- parseLedgerDbConfig configurationFile >>= \case
+    Left err -> error $ "Failed to parse LedgerDB config: " ++ show err
+    Right cfg -> case backend cfg of
+      V2InMemory -> pure $ LedgerDbFlavorArgsV2 $ V2.V2Args V2.InMemoryHandleArgs
   protocolInfo <- mkProtocolInfo args
   withRegistry $ \registry -> do
     let ProtocolInfo {pInfoInitLedger = genesisLedger, pInfoConfig = cfg} = protocolInfo
@@ -145,7 +150,7 @@ withDB configurationFile databaseDir tracer k = do
               (const True)
               (Node.stdMkChainDbHasFS databaseDir)
               (Node.stdMkChainDbHasFS databaseDir)
-              _ldbArgs
+              ldbArgs
               defaultArgs
     ChainDB.withDB chainDbArgs $ \chainDB -> k chainDB
 
@@ -240,11 +245,8 @@ listBlocks db = do
 
 getSnapshot :: ChainDB IO StandardBlock -> StandardPoint -> IO (Result LBS.ByteString)
 getSnapshot db point = do
-  maybeLedgerState <- atomically $ do
-    LedgerDB {getPastLedgerState} <- ChainDB.getCurrentLedger db
-    getPastLedgerState point
-
-  case maybeLedgerState of
+  maybeLedgerState <- atomically $ ChainDB.getPastLedger db $ realPointToPoint point
+  case ledgerState <$> maybeLedgerState of
     Just (LedgerStateConway state) ->
       pure $ Found $ serialize (toEnum 10) $ shelleyLedgerState state
     _other -> pure (Err NotFound)

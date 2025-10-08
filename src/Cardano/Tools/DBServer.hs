@@ -67,7 +67,7 @@ webApp :: ChainDB IO StandardBlock -> Application
 webApp db req send =
   case pathInfo req of
     ["snapshots"] -> handleGetSnapshots
-    ["snapshots", slot] -> handleGetSnapshot slot
+    ["snapshots", slot, hash] -> handleGetSnapshot slot hash
     ["blocks", slot, hash] -> handleGetBlock slot hash
     ["blocks", slot, hash, "header"] -> handleGetHeader slot hash
     ["blocks", slot, hash, "parent"] -> handleGetParent slot hash
@@ -92,18 +92,11 @@ webApp db req send =
 
     handleGetHeader = handleWithPoint getHeader
 
-    handleGetSnapshot slot =
-      case makeSlot slot of
-        Nothing -> send $ responseBadRequest "Malformed slot"
-        Just slot' ->
-          getSnapshot db slot' >>= \case
-            Err NotFound -> send responseNotFound
-            Err err -> send $ responseBadRequest ("Bad query: " <> toBytestring err)
-            Found snapshot -> send $ responseOk (LHex.encode snapshot)
-
     handleGetParent = handleWithPoint getParent
 
     handleGetBlock = handleWithPoint getBlock
+
+    handleGetSnapshot = handleWithPoint getSnapshot
 
 -- * Tracing
 

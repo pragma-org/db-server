@@ -81,7 +81,7 @@ runDBQuery db query = do
         GetBlock point -> getBlock db point
         GetHeader point -> getHeader db point
         GetParent point -> getParent db point
-        GetSnapshot slot -> getSnapshot db slot
+        GetSnapshot slot -> undefined -- getSnapshot db slot
         ListSnapshots -> Found . Aeson.encode <$> listSnapshots db
         ListBlocks -> Found . Aeson.encode <$> listBlocks db
 
