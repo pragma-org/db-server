@@ -43,7 +43,7 @@ module Cardano.Tools.DB
 where
 
 import Cardano.Crypto.Hash (hashToBytes)
-import Cardano.Ledger.Api (StandardCrypto)
+import Cardano.Ledger.Crypto (StandardCrypto)
 import Cardano.Ledger.Binary (serialize)
 import Cardano.Slotting.Slot (SlotNo (..), WithOrigin (..))
 import Cardano.Tools.DBAnalyser.Block.Cardano (Args (CardanoBlockArgs))
@@ -64,7 +64,6 @@ import Ouroboros.Consensus.Block.RealPoint
 import Ouroboros.Consensus.Cardano (CardanoBlock)
 import Ouroboros.Consensus.Cardano.Block (LedgerState (..))
 import Ouroboros.Consensus.Config (configStorage)
-import Ouroboros.Consensus.Fragment.InFuture (dontCheck)
 import Ouroboros.Consensus.Ledger.Extended (ExtLedgerState (ledgerState))
 import qualified Ouroboros.Consensus.Node as Node
 import qualified Ouroboros.Consensus.Node.InitStorage as Node
@@ -74,15 +73,16 @@ import Ouroboros.Consensus.Shelley.Protocol.Abstract (ShelleyHash (..))
 import Ouroboros.Consensus.Storage.ChainDB (BlockComponent (..), ChainDB, IteratorResult (..), TraceEvent, defaultArgs, getBlockComponent, streamAll)
 import qualified Ouroboros.Consensus.Storage.ChainDB as ChainDB
 import Ouroboros.Consensus.Storage.ChainDB.Impl.Args (completeChainDbArgs, updateTracer)
-import Ouroboros.Consensus.Storage.LedgerDB (Checkpoint (unCheckpoint), LedgerDB (..))
+import Ouroboros.Consensus.Storage.LedgerDB (LedgerDB (..), LedgerDbFlavorArgs (LedgerDbFlavorArgsV2))
 import Ouroboros.Consensus.Util.IOLike (atomically)
-import Ouroboros.Consensus.Util.ResourceRegistry (withRegistry)
+import Control.ResourceRegistry (withRegistry)
 import Ouroboros.Network.AnchoredSeq (lookupByMeasure)
 import qualified Ouroboros.Network.AnchoredSeq as Seq
 import Text.Read (readMaybe)
 import qualified Data.Aeson.Types as Aeson
 import qualified Data.Aeson.KeyMap as KeyMap
 import Data.Aeson.Types (fromJSON)
+import qualified Ouroboros.Consensus.Storage.LedgerDB.V2.Args as V2
 
 type StandardBlock = CardanoBlock StandardCrypto
 
@@ -132,6 +132,10 @@ withDB ::
   IO a
 withDB configurationFile databaseDir tracer k = do
   let args = CardanoBlockArgs configurationFile Nothing
+  ldbArgs <- parseLedgerDbConfig configurationFile >>= \case
+    Left err -> error $ "Failed to parse LedgerDB config: " ++ show err
+    Right cfg -> case backend cfg of
+      V2InMemory -> pure $ LedgerDbFlavorArgsV2 $ V2.V2Args V2.InMemoryHandleArgs
   protocolInfo <- mkProtocolInfo args
   withRegistry $ \registry -> do
     let ProtocolInfo {pInfoInitLedger = genesisLedger, pInfoConfig = cfg} = protocolInfo
@@ -140,13 +144,13 @@ withDB configurationFile databaseDir tracer k = do
           updateTracer tracer $
             completeChainDbArgs
               registry
-              dontCheck
               cfg
               genesisLedger
               chunkInfo
               (const True)
               (Node.stdMkChainDbHasFS databaseDir)
               (Node.stdMkChainDbHasFS databaseDir)
+              ldbArgs
               defaultArgs
     ChainDB.withDB chainDbArgs $ \chainDB -> k chainDB
 
@@ -197,34 +201,35 @@ getBlock :: ChainDB IO StandardBlock -> StandardPoint -> IO (Result LBS.ByteStri
 getBlock db point =
   maybe (Err NotFound) Found <$> getBlockComponent db GetRawBlock point
 
-pointOfState :: LedgerState StandardBlock -> StandardPoint
-pointOfState = \case
-  LedgerStateConway state ->
-    makePointOfState state
-  LedgerStateBabbage state ->
-    makePointOfState state
-  _ -> error "snapshots older than conway are not supported"
-  where
-    makePointOfState state =
-      case shelleyLedgerTip state of
-        At shelleyTip ->
-          RealPoint
-            (shelleyTipSlotNo shelleyTip)
-            ( fromRawHash (Proxy @StandardBlock)
-                . hashToBytes
-                . unShelleyHash @StandardCrypto
-                $ shelleyTipHash shelleyTip
-            )
-        Origin -> error "ledger state is at origin"
+--pointOfState :: LedgerState StandardBlock -> StandardPoint
+--pointOfState = \case
+--  LedgerStateConway state ->
+--    makePointOfState state
+--  LedgerStateBabbage state ->
+--    makePointOfState state
+--  _ -> error "snapshots older than conway are not supported"
+--  where
+--    makePointOfState state =
+--      case shelleyLedgerTip state of
+--        At shelleyTip ->
+--          RealPoint
+--            (shelleyTipSlotNo shelleyTip)
+--            ( fromRawHash (Proxy @StandardBlock)
+--                . hashToBytes
+--                . unShelleyHash @StandardCrypto
+--                $ shelleyTipHash shelleyTip
+--            )
+--        Origin -> error "ledger state is at origin"
 
 makeSlot :: Text -> Maybe SlotNo
 makeSlot slotTxt = fromInteger <$> readMaybe (Text.unpack slotTxt)
 
 listSnapshots :: ChainDB IO StandardBlock -> IO [StandardPoint]
 listSnapshots db = do
-  LedgerDB {ledgerDbCheckpoints} <- atomically $ ChainDB.getLedgerDB db
-  let snapshotsList :: [LedgerState StandardBlock] = ledgerState . unCheckpoint <$> Seq.toOldestFirst ledgerDbCheckpoints
-  pure $ pointOfState <$> snapshotsList
+  --LedgerDB {getPastLedgerState} <- atomically $ ChainDB.getCurrentLedger db
+  --let snapshotsList :: [LedgerState StandardBlock] = ledgerState . unCheckpoint <$> Seq.toOldestFirst getPastLedgerState
+  --pure $ pointOfState <$> snapshotsList
+  pure []
 
 listBlocks :: ChainDB IO StandardBlock -> IO [StandardPoint]
 listBlocks db = do
@@ -238,15 +243,12 @@ listBlocks db = do
         IteratorBlockGCed _ ->
           error "block on the current chain was garbage-collected"
 
-getSnapshot :: ChainDB IO StandardBlock -> SlotNo -> IO (Result LBS.ByteString)
-getSnapshot db slot = do
-  LedgerDB {ledgerDbCheckpoints} <- atomically $ ChainDB.getLedgerDB db
-  case lookupByMeasure (At slot) ledgerDbCheckpoints of
-    [snapshot] ->
-      case ledgerState $ unCheckpoint snapshot of
-        LedgerStateBabbage state ->
-          pure $ Found $ serialize (toEnum 10) $ shelleyLedgerState state
-        _other -> pure (Err UnknownStateType)
+getSnapshot :: ChainDB IO StandardBlock -> StandardPoint -> IO (Result LBS.ByteString)
+getSnapshot db point = do
+  maybeLedgerState <- atomically $ ChainDB.getPastLedger db $ realPointToPoint point
+  case ledgerState <$> maybeLedgerState of
+    Just (LedgerStateConway state) ->
+      pure $ Found $ serialize (toEnum 10) $ shelleyLedgerState state
     _other -> pure (Err NotFound)
 
 
