@@ -29,11 +29,7 @@ jobs:
       id: tag
       shell: bash
       run: |
-        if [ "${GITHUB_REF/refs\/tags\//}" == "refs/heads/main"  ]; then
-          echo "value=$GIT_SHA" >> $GITHUB_OUTPUT
-        else
-          echo "value=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
-        fi
+        echo "value=$GIT_SHA" >> $GITHUB_OUTPUT
       env:
         GIT_SHA: ${{ github.sha }}
 
